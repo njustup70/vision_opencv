@@ -1,9 +1,9 @@
 from ultralytics import YOLO
 
-model = YOLO("yolo11n.pt")
+model = YOLO("YOLOv11/models(TrainedByMyself)/Garbage.pt")
 
 model.predict(
-    source = "ultralytics/assets",
+    source = "YOLOv11/ultralytics/assets/garbage",
     show = True,
     save = True
 )
