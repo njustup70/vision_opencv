@@ -9,3 +9,10 @@ YOLOv11/runs
 YOLOv11/ultralytics/cfg
 
 YOLOv11/pretrained_models
+
+YOLOv11/GarbageClassify
+
+YOLOv11/democode
+
+yolo11n.pt
+YOLOv11/democode/demo_predict.py
