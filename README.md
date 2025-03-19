@@ -1,8 +1,7 @@
 ### 这里是计算机视觉部分的代码测试库 目前大致有三个方向：
-### 1.基于深度学习的目标检测与跟踪：准备使用YOLOv11
-### 2.基于ArUco码的机器人视觉跟踪定位
-### 3.基于Pnp的相机位姿解算
-### <center>有问题联系文潇墨 qq:1328821028</center>
+#### 1.基于深度学习的目标检测与跟踪：准备使用YOLOv11
+#### 2.基于ArUco码的机器人视觉跟踪定位
+#### 3.基于Pnp的相机位姿解算
 ### - YOLOv11板块时间戳:
 #### 2024-11-25(wxm-dev) : 先使用通用目标检测数据集coco模型对模型预训练，后使用自定义的篮球数据集进行训练，权重文件保存在 "YOLOv11/models/best-20241124.pt"，训练的详细参数及可视化见[这里](https://www.comet.com/summerwen-lab/basketball-recognition/8bdde0faff8848929aa2f45d74f56469?compareXAxis=step&experiment-tab=panels&showOutliers=true&smoothing=0&xAxis=epoch)
 #### 2024-11-21(wxm-dev) ：上传了YOLOv11官方文档中文版Train部分，并附带了一个可以通过Comet_TL监督训练过程的示例训练程序和数据集配置文件("YOLOv11/demo_train.py YOLOv11/demo_train.yaml")
