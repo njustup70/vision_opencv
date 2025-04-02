@@ -28,16 +28,9 @@ RUN curl -L github.com/oh-my-fish/oh-my-fish/raw/master/bin/install | sudo tee i
     && fish -c "omf install bass" \
     && sudo rm install_omf 
 COPY packages/fish /home/${USERNAME}/.config/fish
-#安装最简ros2
-USER root
-ENV TZ=Asia/Shanghai
-ENV DEBIAN_FRONTEND=noninteractive
-RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key | apt-key add - && \
-    echo "deb http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/ros2.list \
-    && apt-get update && apt-get install -y tzdata ros-humble-ros-base  python3-colcon-common-extensions  ros-humble-image-transport ros-humble-cv-bridge ros-humble-vision-msgs
-#安装opencv和其他依赖
+#安装处理依赖与通信库
 USER $USERNAME
-RUN pip install  opencv-python  imutils
+RUN pip install  opencv-python  imutils pyzmq
 # RUN apt-get update \
 #     #安装fish终端
 #     && add-apt-repository ppa:fish-shell/release-3 -y \
