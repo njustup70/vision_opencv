@@ -54,14 +54,14 @@ class ImageReceive_t:
         shm_key = message['shm_key']
         shape = tuple(message['shape'])
         dtype = np.dtype(message['dtype'])
-        print("shm_key:", shm_key)
+        
         # 读取共享内存（零拷贝）
-        # shm_image = shm.SharedMemory(name=shm_key)
         if image.shape != shape:
             image.resize(shape, refcheck=False)
         if self.shm_key != shm_key:
             self.shm = shm.SharedMemory(name=shm_key)
             self.shm_key = shm_key
+            print("shm_key:", shm_key)
         # image[:] = np.ndarray(shape, dtype=dtype, buffer=shm_image.buf)  # 用共享内存的数据替换掉图像
         image[:] = np.ndarray(shape, dtype=dtype, buffer=self.shm.buf)  # 用共享内存的数据替换掉图像
         # 显示图像
@@ -72,7 +72,7 @@ class ImageReceive_t:
         self._socket.close()
         # 关闭 ZeroMQ 上下文
         self._context.term()
-
+            
 def main():
     receive = ImageReceive_t()
     while True:
