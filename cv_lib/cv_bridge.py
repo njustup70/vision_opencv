@@ -20,7 +20,7 @@ class ImagePublish_t:
         #zmq初始化
         ctx=zmq.Context()
         self.socket=ctx.socket(zmq.PUSH)
-        self.socket.bind(socket)  # 绑定到指定地址
+        self.socket.connect(socket)  # 绑定到指定地址
     def update(self, image:np.ndarray,content:dict=None):
         # self.node.get_logger().info(f"Publishing image to {self.topic}")
         """
