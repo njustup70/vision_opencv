@@ -6,8 +6,8 @@ import yaml
 # ================== 参数配置 ==================
 CHECKERBOARD = (9, 6)        # 棋盘格内角点数量 (cols, rows)
 SQUARE_SIZE = 0.02348       # 棋盘格实际边长（米）
-CALIB_IMG_PATH = "./calibration2/*.jpg"  # 标定图片路径
-OUTPUT_FILE = "./yamls/camera_calibration.yaml"  # 标定结果保存路径
+CALIB_IMG_PATH = "./*.jpg"  # 标定图片路径
+OUTPUT_FILE = "./CameraCalibration/yamls/camera_calibration2.yaml"  # 标定结果保存路径
 
 # ================== 标定流程 ==================
 def calibrate_camera():
