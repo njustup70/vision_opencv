@@ -109,6 +109,9 @@ class ImageReceive_t:
     def __del__(self):
         # 关闭 ZeroMQ 套接字
         self._socket.close()
+        # 关闭共享内存
+        self.shm.close()
+        self.shm.unlink()
         # 关闭 ZeroMQ 上下文
         self._context.term()
             

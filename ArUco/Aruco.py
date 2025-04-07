@@ -2,7 +2,7 @@ import cv2
 import imutils
 from imutils.video import VideoStream
 import time
-
+import numpy as np
 class Aruco:
     """
     ArUco 检测器, 支持图像和视频检测以及快速ArUco码生成
@@ -31,10 +31,17 @@ class Aruco:
         "DICT_APRILTAG_36h10": cv2.aruco.DICT_APRILTAG_36h10,
         "DICT_APRILTAG_36h11": cv2.aruco.DICT_APRILTAG_36h11
     }
-
     def __init__(self):
         self.detector = None
-
+    def __init__(self,aruco_type, if_draw=False):
+        # self.detector = None
+        """初始化 ArUco 检测器"""
+        if aruco_type not in self.ARUCO_DICT:
+            raise ValueError(f"不支持的 ArUco 类型: {aruco_type}")
+        aruco_dict = cv2.aruco.getPredefinedDictionary(self.ARUCO_DICT[aruco_type])
+        aruco_params = cv2.aruco.DetectorParameters()
+        self.detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
+        self.if_draw = if_draw
     def _initialize_detector(self, aruco_type):
         """初始化 ArUco 检测器"""
         if aruco_type not in self.ARUCO_DICT:
@@ -86,6 +93,29 @@ class Aruco:
                     self._draw_marker(image, corner, marker_id)
 
         return image if if_draw else results
+    def update(self, image:np.ndarray,content:dict=None):
+        """
+        更新图像并检测 ArUco 标记
+        :param image: OpenCV 图像对象 (np.ndarray)
+        :param content: 附加的内容，如时间戳、坐标系等
+        """
+        corners, ids, _ = self.detector.detectMarkers(image)
+
+        results = []
+        if ids is not None:
+            # 保留原始 ids 的二维结构 (n, 1)
+            for i in range(len(ids)):
+                marker_id = int(ids[i][0])  # 提取原始数值
+                corner = corners[i].reshape((4, 2))
+                (topLeft, _, _, bottomRight) = corner
+                cX = int((topLeft[0] + bottomRight[0]) / 2)
+                cY = int((topLeft[1] + bottomRight[1]) / 2)
+                results.append({"id": marker_id, "cx": cX, "cy": cY})
+
+                if self.if_draw:
+                    self._draw_marker(image, corner, marker_id)
+        content['results'] = results
+
 
     def detect_video( self, 
                       use_camera=True, 
