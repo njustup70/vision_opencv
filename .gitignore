@@ -14,4 +14,8 @@ YOLOv11/GarbageClassify
 
 yolo11n.pt
 
-
+build/
+log/
+install/
+devel/
+.vscode/start_program
