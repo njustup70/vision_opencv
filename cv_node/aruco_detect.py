@@ -7,7 +7,7 @@ import time
 import cv2
 import numpy as np
 from cv_lib.cv_bridge import ImagePublish_t,ImageReceive_t
-from ArUco.Aruco import Aruco
+from PoseSolver.Aruco import Aruco
 
 def main():
     

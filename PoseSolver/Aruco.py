@@ -32,10 +32,8 @@ class Aruco:
         "DICT_APRILTAG_36h10": cv2.aruco.DICT_APRILTAG_36h10,
         "DICT_APRILTAG_36h11": cv2.aruco.DICT_APRILTAG_36h11
     }
-
-    def __init__(self):
-        self.detector = None
-    def __init__(self,aruco_type, if_draw=False):
+    
+    def __init__(self,aruco_type="DICT_5X5_100", if_draw=False):
         # self.detector = None
         """初始化 ArUco 检测器"""
         if aruco_type not in self.ARUCO_DICT:

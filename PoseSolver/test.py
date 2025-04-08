@@ -16,7 +16,7 @@ dist_coeffs = np.array([
     [-0.15781026869102965,  1.583778819087774, -0.011256244004513636, 0.011363172123126099, -4.632718536609601]
 ], dtype=np.float32)
 
-marker_length = 0.47  # ArUco码实际边长 (单位: 米)
+marker_length = 0.047  # ArUco码实际边长 (单位: 米)
 
 # ================== 初始化模块 ==================
 aruco_detector = Aruco()
@@ -27,7 +27,7 @@ pose_solver = PoseSolver(
 )
 
 # ================== 实时视频模式 ==================
-vs = VideoStream(src=1).start()  # 使用默认摄像头
+vs = VideoStream(src=0).start()  # 使用默认摄像头
 time.sleep(2.0)
 
 while True:
