@@ -32,7 +32,7 @@ COPY packages/fish /home/${USERNAME}/.config/fish
 USER root
 RUN pip uninstall opencv-python opencv-python-headless -y 
 USER $USERNAME
-RUN pip install  opencv-python  imutils pyzmq
+RUN pip install  opencv-python  imutils pyzmq roslibpy
 # RUN apt-get update \
 #     #安装fish终端
 #     && add-apt-repository ppa:fish-shell/release-3 -y \

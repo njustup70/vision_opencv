@@ -1,3 +1,8 @@
+"""_summary_
+@brief:
+    1.ImagePublish_t: 将图像通过共享内存和zmq发布到ros2桥接节点
+    2.ImageReceive_t: 将共享内存图像转化成cv2图像
+"""
 import cv2
 import zmq 
 import multiprocessing.shared_memory as shm
