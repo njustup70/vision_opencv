@@ -19,8 +19,8 @@ def main():
     dist_coeffs=np.array([[0, 0,0, 0, 0]],dtype=np.float32)
     pipe=[]
     pipe.append(ImageReceive_t(print_latency=True))
-    pipe.append(MyYOLO("yolo11n-seg.pt"))
-    pipe.append(ImagePublish_t("aruco"))
+    pipe.append(MyYOLO("yolo11n-seg.pt",show=True))
+    pipe.append(ImagePublish_t("yolo"))
     content={}
     print_time=True
     while True:
@@ -34,6 +34,5 @@ def main():
             if print_time:
                 end_time = time.time()
                 print(f"name:{type(p).__name__}: {(end_time - start_time)*1000:2f} ms")
-                print(content)
 if __name__ == "__main__":
     main()
