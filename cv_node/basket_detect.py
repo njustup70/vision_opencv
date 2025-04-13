@@ -19,8 +19,8 @@ def main():
     dist_coeffs=np.array([[0, 0,0, 0, 0]],dtype=np.float32)
     pipe=[]
     pipe.append(ImageReceive_t(print_latency=True))
-    # pipe.append(MyYOLO("yolo11n-seg_int8_openvino_model/yolo11n-seg.xml",show=True,use_intel=True))
-    pipe.append(MyYOLO("yolo11n-seg.pt",show=True))
+    pipe.append(MyYOLO("yolo11n-seg_int8_openvino_model/yolo11n-seg.xml",show=True,use_intel=True))
+    # pipe.append(MyYOLO("yolo11n-seg.pt",show=True))
     pipe.append(ImagePublish_t("yolo"))
     content={}
     print_time=True

@@ -5,3 +5,5 @@ USER ${USERNAME}
 RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 # 安装yolo
 RUN pip install imutils ultralytics openvino
+#安装其他依赖
+RUN pip install zmq "numpy<2.0"
