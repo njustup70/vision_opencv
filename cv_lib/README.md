@@ -16,5 +16,10 @@
 ```bash
 ros2 launch rosbridge_server rosbridge_websocket_launch.xml
 ```
+### 3.测试方法
+打开ros/cv_bridge.py
+
+如果成功收到图片会打开gui显示
+
 ## 相关链接:
 - [roslibpy文档](https://roslibpy.readthedocs.io/en/latest/)
