@@ -1,14 +1,8 @@
 #导入所需的库
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))) 
-print(sys.path)
+from cv_lib import *
 import time
 import cv2
 import numpy as np
-from cv_lib.cv_bridge import ImagePublish_t,ImageReceive_t
-from PoseSolver.Aruco import Aruco
-from PoseSolver.PoseSolver import PoseSolver
 
 def main():
     # camera_matix=[600.574780 ,0.000000 ,440.893136,0.000000 ,600.705625 ,235.248930,0.000000 ,0.000000 ,1.000000]

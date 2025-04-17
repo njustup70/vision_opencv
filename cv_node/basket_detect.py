@@ -1,15 +1,7 @@
 #导入所需的库
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))) 
-print(sys.path)
-import time
-import cv2
+from cv_lib import *
 import numpy as np
-from cv_lib.cv_bridge import ImagePublish_t,ImageReceive_t
-from PoseSolver.Aruco import Aruco
-from PoseSolver.PoseSolver import PoseSolver
-from YOLOv11.yolo_lib import MyYOLO
+import time
 from os.path import expanduser
 def main():
     camera_martix=np.array([[606.634521484375, 0, 433.2264404296875,],
