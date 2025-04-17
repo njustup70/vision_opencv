@@ -1,4 +1,3 @@
-YOLOv11/README.md
 
 YOLOv11/README.zh-CN.md
 
@@ -19,3 +18,4 @@ log/
 install/
 devel/
 .vscode/start_program
+*.pyc

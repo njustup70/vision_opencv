@@ -121,11 +121,11 @@ class Aruco:
                 (topLeft, _, _, bottomRight) = corner
                 cX = int((topLeft[0] + bottomRight[0]) / 2)
                 cY = int((topLeft[1] + bottomRight[1]) / 2)
-                results.append({"id": marker_id, "cx": cX, "cy": cY})
+                results.append({"id": marker_id, "cx": cX, "cy": cY, "corners": corner})
 
                 if self.if_draw:
                     self._draw_marker(image, corner, marker_id)
-        content['results'] = results
+        content['corners'] = results
 
 
 
