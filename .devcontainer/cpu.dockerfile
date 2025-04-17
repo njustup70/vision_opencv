@@ -23,3 +23,4 @@ RUN pip uninstall opencv-python opencv-python-headless ultralytics -y
 USER $USERNAME
 RUN pip install  opencv-python  imutils pyzmq roslibpy ultralytics
 RUN echo "export PYTHONPATH=~/yolo:$PYTHONPATH" >> ~/.bashrc
+RUN echo "export PYTHONPATH=~/yolo/cv_lib:$PYTHONPATH" >> ~/.bashrc
