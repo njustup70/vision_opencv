@@ -10,17 +10,16 @@ from cv_lib.cv_bridge import ImagePublish_t,ImageReceive_t
 from PoseSolver.Aruco import Aruco
 from PoseSolver.PoseSolver import PoseSolver
 from YOLOv11.yolo_lib import MyYOLO
+from os.path import expanduser
 def main():
-    # camera_matix=[600.574780 ,0.000000 ,440.893136,0.000000 ,600.705625 ,235.248930,0.000000 ,0.000000 ,1.000000]
     camera_martix=np.array([[606.634521484375, 0, 433.2264404296875,],
                             [0, 606.5910034179688, 247.10369873046875],
                             [0.000000, 0.000000, 1.000000]],dtype=np.float32)
-    # dist_coeffs=[0.077177 ,-0.119285 ,-0.006264 ,0.005271 ,0.000000]
     dist_coeffs=np.array([[0, 0,0, 0, 0]],dtype=np.float32)
+    model_path=expanduser("~/yolo/YOLOv11/models/yolo11n-seg_int8_openvino_model/yolo11n-seg.xml")
     pipe=[]
     pipe.append(ImageReceive_t(print_latency=True))
-    pipe.append(MyYOLO("yolo11n-seg_int8_openvino_model/yolo11n-seg.xml",show=True,use_intel=True))
-    # pipe.append(MyYOLO("yolo11n-seg.pt",show=True))
+    pipe.append(MyYOLO(model_path,show=True,use_intel=True))
     pipe.append(ImagePublish_t("yolo"))
     content={}
     print_time=True
