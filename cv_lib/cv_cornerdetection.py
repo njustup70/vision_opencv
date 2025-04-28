@@ -25,7 +25,8 @@ class BRISKCornerDetector:
         if self.show_result:
             img_kp = cv2.drawKeypoints(
                 image, keypoints, None, 
-                flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS
+                #flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS
+                flags=cv2.DRAW_MATCHES_FLAGS_DEFAULT  # 只显示简单点
             )
             cv2.imshow("BRISK Corners", img_kp)
             cv2.waitKey(1)
