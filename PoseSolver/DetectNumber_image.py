@@ -16,7 +16,7 @@ import sys
 # args = vars(ap.parse_args())
 
 args = {
-    "image": "E:/Code/NJUST-UP70/vision_yolo/ArUco/test_5x5_100.png",  
+    "image": "/home/Elaina/yolo/PoseSolver/test_5x5_100.png",  
     "type": "DICT_5X5_100"  
 }
 
