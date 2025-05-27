@@ -5,7 +5,7 @@ ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 ARG GROUP_NAME=wheel
 RUN apt-get update \
-    && apt-get install -y  sudo vim 
+    && apt-get install -y  sudo vim nautilus 
 # 创建用户和用户组
 RUN groupadd --gid $USER_GID ${GROUP_NAME} \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME \
