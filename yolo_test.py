@@ -27,7 +27,8 @@ class MyYOLO():
     def update(self, image: np.ndarray, content: dict, confidence_threshold=0.5):
         results = self.model(image)
         content["corners"] = []
-    
+        content["masks"] = []  # 存储掩膜信息
+
         # 存储所有符合阈值条件的候选掩膜
         valid_masks = []
 
@@ -70,29 +71,20 @@ class MyYOLO():
                     print(f"掩膜筛选出错: {str(e)}")
                     continue
 
-        # 选择置信度最高的掩膜进行处理
-        if valid_masks:
-            best_mask_info = max(valid_masks, key=lambda x: x["confidence"])
-        
-            # 对最高置信度掩膜进行后处理
-            processed_points = self._postprocess_mask(best_mask_info["mask"], image.shape[:2])
-            final_corners = self._optimized_corner_detection(processed_points, image.shape[:2])
-            ordered_corners = self._order_corners(final_corners)
-        
+        # 存储所有有效掩膜信息
+        for mask_info in valid_masks:
+            # 对掩膜进行后处理
+            processed_mask = self._postprocess_mask(mask_info["mask"], image.shape[:2])
+            
             # 保存处理结果
-            content["corners"].append({
-                "corners": ordered_corners,
-                "confidence": best_mask_info["confidence"],
-                "raw_points": processed_points
+            content["masks"].append({
+                "mask": processed_mask,
+                "confidence": mask_info["confidence"],
             })
-        
-            # 调试信息
-            print(f"最高置信度: {best_mask_info['confidence']:.4f}")
 
         # 可视化结果
         if self.show and len(results) > 0:
             self._visualize_results(results[0], image, content, confidence_threshold)
-
 
     def _postprocess_mask(self, mask_points, image_shape):
         """对预测掩膜进行后处理，提升质量"""
@@ -123,88 +115,6 @@ class MyYOLO():
         # 返回优化后的轮廓点
         return approx.reshape(-1, 2).astype(np.float32)
 
-    def _optimized_corner_detection(self, points: np.ndarray, image_shape) -> np.ndarray:
-        """优化的角点检测方法，结合轮廓分析和透视变换原理"""
-        # 创建掩膜并查找轮廓
-        mask_img = np.zeros(image_shape[:2], dtype=np.uint8)
-        cv2.fillPoly(mask_img, [points.astype(np.int32)], 255)
-        contours, _ = cv2.findContours(mask_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return np.zeros((4, 2), dtype=np.float32)
-        
-        # 获取最大轮廓
-        largest_contour = max(contours, key=cv2.contourArea)
-        
-        # Douglas-Peucker算法进行多边形逼近
-        epsilon = 0.02 * cv2.arcLength(largest_contour, True)
-        approx = cv2.approxPolyDP(largest_contour, epsilon, True)
-        
-        # 如果逼近结果刚好是四边形，直接使用
-        if len(approx) == 4:
-            return approx.reshape(-1, 2).astype(np.float32)
-        
-        # 计算凸包
-        hull = cv2.convexHull(largest_contour)
-        
-        # 角点检测方法
-        if len(hull) >= 4:
-            # Shi-Tomasi角点检测
-            corners = cv2.goodFeaturesToTrack(mask_img, 4, 0.01, 10)
-            if corners is not None:
-                corners = corners.reshape(-1, 2)
-                
-                # 确保有4个角点
-                if len(corners) == 4:
-                    return corners
-        
-        # 作为后备，使用方向投影法
-        contour_points = largest_contour.reshape(-1, 2)
-        center = np.mean(contour_points, axis=0)
-        
-        # 定义四个方向：上、下、左、右
-        directions = np.array([[0, -1], [0, 1], [-1, 0], [1, 0]])
-        
-        extreme_points = []
-        for dir in directions:
-            projections = np.dot(contour_points - center, dir)
-            idx = np.argmax(projections)
-            extreme_points.append(contour_points[idx])
-        
-        return np.array(extreme_points, dtype=np.float32)
-
-    def _order_corners(self, corners):
-        """
-        确保角点顺序为左上、右上、右下、左下
-        """
-        if len(corners) != 4:
-            return corners
-            
-        # 计算质心
-        center = np.mean(corners, axis=0)
-        
-        # 计算每个点的x+y和x-y值
-        sums = [pt[0] + pt[1] for pt in corners]
-        diffs = [pt[0] - pt[1] for pt in corners]
-        
-        # 左上角: x+y最小
-        top_left_idx = np.argmin(sums)
-        top_left = corners[top_left_idx]
-        
-        # 右下角: x+y最大
-        bottom_right_idx = np.argmax(sums)
-        bottom_right = corners[bottom_right_idx]
-        
-        # 右上角: x-y最大
-        top_right_idx = np.argmax(diffs)
-        top_right = corners[top_right_idx]
-        
-        # 左下角: x-y最小
-        bottom_left_idx = np.argmin(diffs)
-        bottom_left = corners[bottom_left_idx]
-        
-        # 返回有序角点
-        return np.array([top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
-
     def _visualize_results(self, result, image, content, confidence_threshold=0.5):
         """可视化检测结果"""
         try:
@@ -212,39 +122,29 @@ class MyYOLO():
             image_result = np.zeros_like(image)
         
             # 绘制筛选后的掩膜
-            for corner_data in content["corners"]:
-                confidence = corner_data["confidence"]
+            for mask_data in content["masks"]:
+                confidence = mask_data["confidence"]
                 if confidence >= confidence_threshold:
-                    corners = corner_data["corners"].astype(np.int32)
-                    raw_points = corner_data["raw_points"].astype(np.int32)
+                    mask_points = mask_data["mask"].astype(np.int32)
                 
                     # 绘制掩膜区域
-                    cv2.fillPoly(image_result, [raw_points], (0, 255, 0, 50))  # 半透明绿色
-                
-                    # 绘制连接线
-                    cv2.polylines(image_result, [corners.reshape((-1, 1, 2))],
-                              True, (255, 0, 255), 2)
-
-                    # 标记四个极值点（不同颜色）
-                    colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (255, 255, 0)]
-                    labels = ["TL", "TR", "BR", "BL"]  # 左上、右上、右下、左下
-                    for i, pt in enumerate(corners):
-                        cv2.circle(image_result, tuple(pt), 8, colors[i], -1)
-                        cv2.putText(image_result, labels[i],
-                                (pt[0] + 10, pt[1] + 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, colors[i], 2)
+                    cv2.fillPoly(image_result, [mask_points], (0, 255, 0, 50))  # 半透明绿色
                 
                     # 添加置信度文本
-                    cv2.putText(image_result, f"Conf: {confidence:.2f}",
-                                (corners[0][0], corners[0][1] - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    # 计算掩膜的中心点用于放置文本
+                    M = cv2.moments(mask_points)
+                    if M["m00"] != 0:
+                        cX = int(M["m10"] / M["m00"])
+                        cY = int(M["m01"] / M["m00"])
+                        cv2.putText(image_result, f"Conf: {confidence:.2f}",
+                                    (cX, cY),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
             # 将绘制结果合并到原图上
-            if len(content["corners"]) > 0:
+            if len(content["masks"]) > 0:
                 image[:] = cv2.addWeighted(image, 1, image_result, 0.7, 0)
             else:
                 image[:] = image_result  # 如果没有筛选出掩膜，显示原图
             
         except Exception as e:
             print(f"可视化出错: {str(e)}")
-

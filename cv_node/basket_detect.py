@@ -10,6 +10,7 @@ from cv_lib.ros.cv_bridge import ImagePublish_t, ImageReceive_t
 from PoseSolver.Aruco import Aruco
 from PoseSolver.PoseSolver import PoseSolver
 from YOLOv11.yolo_lib import MyYOLO
+#from yolo_test import MyYOLO
 
 def main():
     # 相机内参矩阵
