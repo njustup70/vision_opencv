@@ -99,15 +99,17 @@ class PoseSolver:
                 pnp_result["yaw"] = np.degrees(yaw)
                 pnp_result["roll"] = np.degrees(roll)
                 
-                # 计算并存储距离
+                # 计算并存储距离和Y轴偏移量
                 pnp_result["distance"] = np.linalg.norm(tvec)
+                pnp_result["y_offset"] = tvec[1][0]  # 提取Y轴平移量（单位：米）
 
                 # 将结果存储到类的属性中
                 self.pnp_result = pnp_result
 
                 if self.print_result:
                     print(f"目标 {i + 1}:")
-                    print(f"  Pitch: {pnp_result['pitch']:.1f}°, Yaw: {pnp_result['yaw']:.1f}°, Roll: {pnp_result['roll']:.1f}°, 距离: {pnp_result['distance']:.3f}m")
+                    print(f"  Pitch: {pnp_result['pitch']:.1f}°, Yaw: {pnp_result['yaw']:.1f}°, Roll: {pnp_result['roll']:.1f}°")
+                    print(f"  距离: {pnp_result['distance']:.3f}m, Y轴偏移: {pnp_result['y_offset']:.3f}m")
 
             except AssertionError as e:
                 print(f"目标 {i + 1} 角点格式错误: {e}")

@@ -3,8 +3,8 @@ import os
 import time
 import cv2
 import numpy as np
-import rclpy
 import json
+import rclpy
 from rclpy.node import Node
 from cv_lib.ros.basket_ros import ImagePublish_t
 from PoseSolver.PoseSolver import PoseSolver
@@ -26,6 +26,9 @@ class ImageProcessingNode(Node):
 
         # 畸变系数
         self.dist_coeffs = np.array([[0, 0, 0, 0, 0]], dtype=np.float32)
+        
+        # Y轴偏移量校正值（单位：米）
+        self.y_offset_correction = 0.16
 
         # 初始化各组件
         self.aruco_detector = Aruco("DICT_5X5_1000", if_draw=True)
@@ -33,13 +36,14 @@ class ImageProcessingNode(Node):
         self.pose_solver = PoseSolver(
             self.camera_matrix,
             self.dist_coeffs,
-            marker_length=0.1,
+            marker_length=0.0885,
+            marker_width=None,
             print_result=True
         )
 
         # 创建发布者
         self.yaw_publisher = self.create_publisher(Float32, 'aruco_yaw', 10)
-        self.json_publisher = self.create_publisher(String, 'aruco_yaw_json', 10)  # 新增JSON发布者
+        self.json_publisher = self.create_publisher(String, 'aruco_yaw_json', 10)
 
         # 图像缓冲区
         self.image = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -67,14 +71,14 @@ class ImageProcessingNode(Node):
             self.get_logger().error(f"堆栈跟踪: {traceback.format_exc()}")
 
     def is_detect_aruco(self):
-        """返回yaw值并发布JSON格式"""
+        """返回校正后的yaw值和y_offset并发布JSON格式"""
         yaw_msg = Float32()
         json_msg = String()
 
         if not hasattr(self.pose_solver, 'pnp_result'):
             yaw_msg.data = 0.0
-            # 构造JSON: {"has_yaw": false}
-            json_data = {"has_yaw": False}
+            # 构造JSON: {"has_yaw": false, "has_offset": false}
+            json_data = {"has_yaw": False, "has_offset": False}
             json_msg.data = json.dumps(json_data)
             self.yaw_publisher.publish(yaw_msg)
             self.json_publisher.publish(json_msg)
@@ -82,19 +86,34 @@ class ImageProcessingNode(Node):
 
         pose_info = self.pose_solver.pnp_result
 
-        if 'yaw' not in pose_info or pose_info['yaw'] is None:
+        # 检查yaw和y_offset是否存在
+        has_yaw = 'yaw' in pose_info and pose_info['yaw'] is not None
+        has_offset = 'y_offset' in pose_info and pose_info['y_offset'] is not None
+
+        if not has_yaw or not has_offset:
             yaw_msg.data = 0.0
-            # 构造JSON: {"has_yaw": false}
-            json_data = {"has_yaw": False}
+            # 构造JSON: {"has_yaw": false, "has_offset": false}
+            json_data = {"has_yaw": False, "has_offset": False}
             json_msg.data = json.dumps(json_data)
             self.yaw_publisher.publish(yaw_msg)
             self.json_publisher.publish(json_msg)
             return 0
 
         yaw_value = float(pose_info['yaw'])
+        raw_y_offset = float(pose_info['y_offset'])
+        
+        # 校正Y轴偏移量（减去0.16米）
+        corrected_y_offset = raw_y_offset - self.y_offset_correction
+        
         yaw_msg.data = yaw_value
-        # 构造JSON: {"yaw": 角度值, "has_yaw": true}
-        json_data = {"yaw": yaw_value, "has_yaw": True}
+        
+        # 构造JSON: 只包含校正后的偏移量
+        json_data = {
+            "yaw": yaw_value,
+            "corrected_y_offset": corrected_y_offset,
+            "has_yaw": True,
+            "has_offset": True
+        }
         json_msg.data = json.dumps(json_data)
         self.yaw_publisher.publish(yaw_msg)
         self.json_publisher.publish(json_msg)
@@ -123,8 +142,14 @@ class ImageProcessingNode(Node):
             if hasattr(self.pose_solver, 'pnp_result'):
                 delattr(self.pose_solver, 'pnp_result')
 
-        # 发布yaw值和JSON
-        self.is_detect_aruco()
+        # 发布yaw值、校正后的y_offset和JSON
+        yaw_value = self.is_detect_aruco()
+        
+        if yaw_value != 0:
+            # 从pose_solver中获取校正后的y_offset（需要确保pose_solver已更新）
+            if hasattr(self.pose_solver, 'pnp_result'):
+                corrected_y_offset = self.pose_solver.pnp_result.get('corrected_y_offset', 0)
+                print(f"  Yaw角度: {yaw_value:.1f}°, 校正后Y轴偏移: {corrected_y_offset:.3f}m")
 
         # 显示结果
         cv2.imshow("Detection Result", self.image)

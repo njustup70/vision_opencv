@@ -23,5 +23,6 @@ basket_seg/labels.txt
 
 *.json
 *.jpg
+*.JPG
 
 *.MP4
