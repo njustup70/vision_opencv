@@ -5,6 +5,9 @@ import cv2
 import numpy as np
 import rclpy
 import json
+
+sys.path.append(os.path.dirname("/home/Elaina/yolo/cv_lib"))
+
 from rclpy.node import Node
 from cv_lib.ros.basket_ros import ImagePublish_t
 from PoseSolver.PoseSolver import PoseSolver

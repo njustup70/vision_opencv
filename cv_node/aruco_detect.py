@@ -5,6 +5,9 @@ import cv2
 import numpy as np
 import json
 import rclpy
+
+sys.path.append(os.path.dirname("/home/Elaina/yolo/cv_lib"))
+
 from rclpy.node import Node
 from cv_bridge import CvBridge
 from std_msgs.msg import Float32, String
@@ -12,6 +15,7 @@ from cv_lib.ros.basket_ros import ImagePublish_t
 from PoseSolver.PoseSolver import PoseSolver
 from PoseSolver.Aruco import Aruco
 from sensor_msgs.msg import CompressedImage, Image
+
 
 class ImageProcessingNode(Node):
     def __init__(self):
