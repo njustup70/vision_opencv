@@ -26,3 +26,4 @@ services:
     user: "Elaina"
     # runtime: "nvidia"
     working_dir: "/home/Elaina/yolo" # 指定默认工作目录
+    entrypoint: ["/bin/bash" , "-c" , "source /opt/ros/humble/setup.bash && python3 /home/Elaina/yolo/cv_node/aruco_detect.py"]

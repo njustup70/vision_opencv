@@ -4,6 +4,7 @@ FROM elainasuki/ros:ros2-humble-full-0614
 ARG USERNAME=Elaina
 
 ARG USER_GID=$USER_UID
+
 ARG GROUP_NAME=wheel
 RUN apt-get update \
     && apt-get install -y  sudo vim nautilus 
@@ -17,7 +18,11 @@ RUN pip install imutils ultralytics openvino
 RUN pip install zmq "numpy<2.0"
 # 安装ROS通信库
 RUN pip install roslibpy pyzmq
+
 USER root
 RUN echo "export PYTHONPATH=~/yolo:$PYTHONPATH" >> ~/.bashrc \
-    && echo "export ROS_LOCALHOST_ONLY=1" >> /home/$USERNAME/.bashrc 
-    && echo "export PYTHONPATH=/home/Elaina/yolo:$PYTHONPATH" >> /home/$USERNAME/.bashrc
+    && echo "export ROS_LOCALHOST_ONLY=1" >> /home/$USERNAME/.bashrc \
+    && echo "export PYTHONPATH=/home/Elaina/yolo:$PYTHONPATH" >> /home/$USERNAME/.bashrc \
+    && echo "source /opt/ros/humble/setup.bash" >> /home/${USERNAME}/.bashrc
+
+
