@@ -54,8 +54,8 @@ class ImageProcessingNode(Node):
         self.bridge = CvBridge()
 
         # 创建订阅者
-        self.sub_com = self.create_subscription(CompressedImage, "/camera/color/image_raw/compressed", self.compressed_image_callback, 1)
-        self.sub_raw = self.create_subscription(Image, "/camera/color/image_raw", self.regular_image_callback, 1)
+        self.sub_com = self.create_subscription(CompressedImage, "/camera/color/image_raw/compressed/filtered", self.compressed_image_callback, 1)
+        self.sub_raw = self.create_subscription(Image, "/camera/color/image_raw/filtered", self.regular_image_callback, 1)
 
     def compressed_image_callback(self, msg: CompressedImage):
         """处理压缩图像消息的回调函数"""
