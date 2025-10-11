@@ -1,9 +1,34 @@
-### <mark>这里是视觉识别算法的代码测试库 目前准备使用YOLOv11+DeepSORT</mark>
-### <center>有问题联系文潇墨 qq:1328821028</center>
-### - YOLOv11板块时间戳:
-#### 2024-11-25(wxm-dev) : 先使用通用目标检测数据集coco模型对模型预训练，后使用自定义的篮球数据集进行训练，权重文件保存在 "YOLOv11/models/best-20241124.pt"，训练的详细参数及可视化见[这里](https://www.comet.com/summerwen-lab/basketball-recognition/8bdde0faff8848929aa2f45d74f56469?compareXAxis=step&experiment-tab=panels&showOutliers=true&smoothing=0&xAxis=epoch)
-#### 2024-11-19(wxm-dev) : 上传了完整的可以在Docker容器里运行的YOLOv11版本，并附带了一个简单的使用例程代码("YOLOv11/predict.py")
-#### 2024-11-18(wxm-dev) : 上传了YOLOv11官方文档中文版Predict部分,在"YOLOv11官方介绍文档中文版"下。
+## 容器构建
+- 支持 --cpu 或者 --ros 与无参数，对应只用cpu(在维护) ，ros2耦合与 gpu(较大)
+- 使用历程
+```bash
+.devcontainer$ ./build.sh --cpu 
+```
+## 模块介绍
+|模块 |说明 |
+|---|---|
+|[cv_node](./cv_node/)|具体逻辑实现,类似ros2节点(核心代码)|
+|[cv_lib](./cv_lib/)|每个功能的实现|
+|[PoseSolver](./PoseSolver/)|pnp与aruco码|
+|[YOLOv11](./YOLOv11/)|YOLO代码都在里面|
+## 开发容器
+- 进入容器后需要选择解释器(在vscode右下角)
+- 打开终端输入
+```bash
+which python
+```
+- 选择同一个路径的python就行
 
-### - DeepSORT板块时间戳:
+## 注意事项
+### 现在的数据源从ros2话题获得,并且需要在ros2那边开一个转发节点
 
+## 问题
+1.遇到显示界面崩溃问题的  
+暂定用如下方式，有点纯（后续优化）——补足部分依赖
+```bash
+sudo apt-get install nautilus
+```
+2.遇到无法找到模块解析路径问题(已解决)
+```bash
+export PYTHONPATH="/home/Elaina/yolo:$PYTHONPATH"
+```

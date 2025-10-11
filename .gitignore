@@ -1,4 +1,28 @@
-YOLOv11/README.md
+
 YOLOv11/README.zh-CN.md
 
+YOLOv11/ultralytics/datasets
 
+YOLOv11/runs
+
+YOLOv11/ultralytics/cfg
+
+YOLOv11/pretrained_models
+
+YOLOv11/GarbageClassify
+
+yolo11n.pt
+
+build/
+log/
+install/
+devel/
+.vscode/start_program
+*.pyc
+basket_seg/labels.txt
+
+*.json
+*.jpg
+*.JPG
+
+*.MP4
