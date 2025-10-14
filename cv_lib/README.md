@@ -23,3 +23,7 @@
 ```bash
 提供类 MyYOLO 函数，主要执行yolo推理过程，并输出结果
 ```
+### - [PoseSolver.py](./PoseSolver.py)
+```bash
+提供类 *PoseSolver* 
+```

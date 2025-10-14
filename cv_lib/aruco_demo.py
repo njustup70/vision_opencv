@@ -1,5 +1,5 @@
 from aruco_lib import Aruco
-from PoseSolver.PoseSolver import PoseSolver
+from cv_lib.PoseSolver import PoseSolver
 from imutils.video import VideoStream
 import cv2
 import numpy as np
