@@ -1,26 +1,25 @@
+# VERSION_OPENCV
+## RC2026：这是2026赛季的视觉仓库，主要存放yolo，opencv，pnp解算和arucuo识别等代码。
+## 维护者：陈成  &nbsp; QQ:194025781 
 ## 容器构建
-- 支持 --cpu 或者 --ros 与无参数，对应只用cpu(在维护) ，ros2耦合与 gpu(较大)
+### 当前支持ROS构建和GPU构建镜像两种方式，其中GPU构建主要是在本地训练模型，ROS构建主要是后期部署
 - 使用历程
 ```bash
-.devcontainer$ ./build.sh --cpu 
+(gpu)|.devcontainer/gpu$ ./build.sh 
 ```
+```bash
+(ros)|.devcontainer/ros$ ./build.bash
+```
+### 相应的容器名称后缀不同 yolo_container_cpu / yolo_container_gpu
 ## 模块介绍
 |模块 |说明 |
 |---|---|
-|[cv_node](./cv_node/)|具体逻辑实现,类似ros2节点(核心代码)|
-|[cv_lib](./cv_lib/)|每个功能的实现|
-|[PoseSolver](./PoseSolver/)|pnp与aruco码|
-|[YOLOv11](./YOLOv11/)|YOLO代码都在里面|
-## 开发容器
-- 进入容器后需要选择解释器(在vscode右下角)
-- 打开终端输入
-```bash
-which python
-```
-- 选择同一个路径的python就行
+|[CameraCalibration](./CameraCalibration/)|相机标定|
+|[cv_lib](./cv_lib/)|opencv,yolo,aruco库函数存放|
+|[PoseSolver](./PoseSolver/)|pnp解算|
+|[yolo](./yolo/)|yolo模型训练|
+### 对应四个文件夹下的均设置对应readme，可参照进行使用
 
-## 注意事项
-### 现在的数据源从ros2话题获得,并且需要在ros2那边开一个转发节点
 
 ## 问题
 1.遇到显示界面崩溃问题的  

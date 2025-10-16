@@ -1,25 +1,29 @@
-## 与 ROS 2 通信的两种方式
-
-### 1. 共享内存 + ZMQ 通信方式
-
-- **优点**：传输速度快  
-- **缺点**：扩展性较差，接入复杂  
-- **适用场景**：图像流传输等大数据量通信  
-- **使用说明**：需要在ros2 driver容器启动 `image_bridge.py` 脚本
-
-### 2. 使用 roslibpy 通信方式
-
-- **优点**：API 类似于 ROS 1，易于上手  
-- **缺点**：通信速度较慢  
-- **适用场景**：小数据传输，如点、标量数据等  
-- **使用说明**：需要在ros2容器启动 `rosbridge_server`  
+# cv_lib
+## [aruco_img](./aruco_image/) 
+### 存放aruco图片文件夹
+## demo
+### - [aruco_demo.py](./aruco_demo.py)
+### - aruco码识别的简单例子
+### - [aruco_img.py](./aruco_image.py)
+### - aruco码进行图片识别
+## cv_lib
+### - [aruco_lib.py](./aruco_lib.py)
 ```bash
-ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+提供类 Aruco 函数，主要负责生成，检测，更新aruco码的内容
 ```
-### 3.测试方法
-打开ros/cv_bridge.py
-
-如果成功收到图片会打开gui显示
-
-## 相关链接:
-- [roslibpy文档](https://roslibpy.readthedocs.io/en/latest/)
+### - [cv_brigde.py](./cv_bridge.py)
+```bash
+提供类 ImagePublish_t,ImageSubscribe_t,CompressedImagePublishe_t,CompressedImageSubscribe_t 函数，主要负责接受/发送压缩/未压缩的图像数据
+```
+### - [cv_mask.py](./cv_mask.py)
+```bash
+提供类 MaskProcessor 函数，主要负责将掩膜进行优化处理，并提供可视化
+```
+### - [yolo_lib.py](./yolo_lib.py)
+```bash
+提供类 MyYOLO 函数，主要执行yolo推理过程，并输出结果
+```
+### - [PoseSolver.py](./PoseSolver.py)
+```bash
+提供类 *PoseSolver* 
+```

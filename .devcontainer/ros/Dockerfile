@@ -29,11 +29,15 @@ RUN pip install imutils ultralytics openvino
 RUN pip install zmq "numpy<2.0"
 # 安装ROS通信库
 RUN pip install roslibpy pyzmq
+# 安装实验跟踪库
+RUN pip install comet_ml
 
 USER root
-RUN echo "export PYTHONPATH=~/yolo:$PYTHONPATH" >> ~/.bashrc \
-    && echo "export ROS_LOCALHOST_ONLY=1" >> /home/$USERNAME/.bashrc \
-    && echo "export PYTHONPATH=/home/Elaina/yolo:$PYTHONPATH" >> /home/$USERNAME/.bashrc \
-    && echo "source /opt/ros/humble/setup.bash" >> /home/${USERNAME}/.bashrc \
+RUN echo "source /opt/ros/humble/setup.bash" >> /home/${USERNAME}/.bashrc \
     && echo "export PATH=\$HOME/.local/bin:\$PATH" >> /home/$USERNAME/.bashrc \
     && echo "set -gx PATH \$HOME/.local/bin \$PATH" >> /home/$USERNAME/.config/fish/config.fish
+
+ENV PYTHONPATH = /home/Elaina/yolo
+ENV PYTHONPATH = ~/yolo
+ENV PYTHONPATH = /home/Elaina/yolo/cv_lib
+

@@ -12,9 +12,10 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=all
       - OMP_WAIT_POLICY=passive
       - TERM=xterm-256color
+      - ROS_LOCALHOST_ONLY=1
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
-      - ./../..:/home/yc-dlan/yolo
+      - ./../..:/home/Elaina/yolo
       - /dev:/dev
     network_mode: host
     pid: "host" # 添加 pid 命名空间共享

@@ -1,6 +1,6 @@
 {
     "name": "ros2yolo-container",
-    "dockerComposeFile": "docker-compose.yml",
+    "dockerComposeFile": "ros/docker-compose.yml",
     "service": "ros2yolo-service",
     "workspaceFolder": "/home/Elaina/yolo",
     "shutdownAction": "stopCompose",
