@@ -2,7 +2,7 @@
 FROM elainasuki/ros:ros2-humble-full-0614
 
 ARG USERNAME=Elaina
-
+ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
 ARG GROUP_NAME=wheel
@@ -12,10 +12,10 @@ RUN apt-get update \
 USER ${USERNAME}
 
 # 安装fish插件（切换到普通用户）
-RUN curl -L https://github.com/oh-my-fish/oh-my-fish/raw/master/bin/install | sudo tee install_omf > /dev/null && \
-    fish install_omf --noninteractive && \
-    fish -c "omf install bass" && \
-    sudo rm install_omf 
+RUN curl -L https://github.com/oh-my-fish/oh-my-fish/raw/master/bin/install | sudo tee install_omf > /dev/null || true && \
+    fish install_omf --noninteractive || true && \
+    fish -c "omf install bass" || true && \
+    sudo rm install_omf || true
 
 # 复制fish配置
 COPY packages/fish /home/${USERNAME}/.config/fish
@@ -37,7 +37,7 @@ RUN echo "source /opt/ros/humble/setup.bash" >> /home/${USERNAME}/.bashrc \
     && echo "export PATH=\$HOME/.local/bin:\$PATH" >> /home/$USERNAME/.bashrc \
     && echo "set -gx PATH \$HOME/.local/bin \$PATH" >> /home/$USERNAME/.config/fish/config.fish
 
-ENV PYTHONPATH = /home/Elaina/yolo
-ENV PYTHONPATH = ~/yolo
-ENV PYTHONPATH = /home/Elaina/yolo/cv_lib
+ENV PYTHONPATH=/home/Elaina/yolo
+ENV PYTHONPATH=~/yolo
+ENV PYTHONPATH=/home/Elaina/yolo/cv_lib
 
