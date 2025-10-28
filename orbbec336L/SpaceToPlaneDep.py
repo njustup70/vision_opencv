@@ -1,37 +1,16 @@
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import Image, CameraInfo, PointCloud2
 from cv_bridge import CvBridge
 import numpy as np
 from image_geometry import PinholeCameraModel
-import time
 import sensor_msgs_py.point_cloud2 as pc2
-from rclpy.task import Future
-from sensor_msgs.msg import PointCloud2
 
 def cam_to_pix(X, Y, Z, model):
     uv = model.project3dToPixel((X, Y, Z))
     depth = Z
     return uv[0], uv[1], depth
-'''
-def wait_for_message(topic, msg_type, node, timeout=10):
-    #在给定时间内同步等待一次消息返回。
-    from threading import Event
-    msg_event = Event()
-    result = [None]
-    def callback(msg):
-        result[0] = msg
-        msg_event.set()
-    sub = node.create_subscription(msg_type, topic, callback, 10)
-    # 等待消息
-    node.get_logger().info('Waiting for camera_info...')
-    if not msg_event.wait(timeout):
-        raise TimeoutError(f"Timeout while waiting for {topic}")
-    else:
-        node.get_logger().info('Get camera_info...')
-    node.destroy_subscription(sub)
-    return result[0]
-'''
+
 class CameraToPixel(Node):
     def __init__(self):
         super().__init__('camera_to_pixel')
@@ -42,7 +21,7 @@ class CameraToPixel(Node):
         self.depth_data = None
         self.timelist = [0] * 10
         self.timeListHead = 0
-        self.create_subscription(CameraInfo, '/camera/depth/camera_info', self.info_callback, 10)
+        self.create_subscription(CameraInfo, '/camera/depth/camera_info', self.info_init_callback, 10)
         #msg = wait_for_message('/camera/depth/camera_info', CameraInfo, self)
         #self.model.fromCameraInfo(msg)
         self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, 10)
@@ -54,7 +33,7 @@ class CameraToPixel(Node):
         self.height = 0
         self.get_logger().info('Waiting for point frames...')
 
-    def info_callback(self, msg):
+    def info_init_callback(self, msg):
         if self.cameraInfoInit:
             return
         self.model.fromCameraInfo(msg)
@@ -67,6 +46,31 @@ class CameraToPixel(Node):
         self.get_logger().info('Received depth image frame...')
         depth_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough').astype(np.float32)
         self.depth_data = depth_img / 1000.0  # Convert mm to meters
+    
+    def dep_errors(self, depth_map, depth_data):
+        point_count = 0
+        err_average = 0.0
+        err_sum = 0.0
+        valid_count = 0
+        unvalid_count = 0
+        deviant20_count = 0
+        self.get_logger().info(f'{self.width}x{self.height} depth comparison:')
+        for v in range(self.height):
+            for u in range(self.width):
+                depth_from_points = depth_map[v, u]
+                depth_from_image = depth_data[v, u]
+                if not (np.isnan(depth_from_points) or depth_from_points == 0) and not (np.isnan(depth_from_image) or depth_from_image == 0):
+                    err_value = abs(depth_from_points - depth_from_image) / depth_from_image
+                    err_sum += err_value
+                    point_count += 1
+                    if err_value > 0.2 and err_value < 0.5:
+                        deviant20_count += 1
+                    elif err_value >= 0.5:
+                        unvalid_count += 1
+                    else:
+                        valid_count += 1
+        err_average = err_sum / point_count if point_count > 0 else 0.0
+        return point_count, valid_count, deviant20_count, unvalid_count, err_average
 
     def point_callback(self, msg):
         if self.model.P is None:
@@ -85,28 +89,7 @@ class CameraToPixel(Node):
                 if np.isnan(self.depth_map[v, u]) or depth < self.depth_map[v, u]:
                     self.depth_map[v, u] = depth
         # Now compare self.depth_map with self.depth_data
-        point_count = 0
-        err_average = 0.0
-        err_sum = 0.0
-        valid_count = 0
-        unvalid_count = 0
-        deviant20_count = 0
-        self.get_logger().info(f'{self.width}x{self.height} depth comparison:')
-        for v in range(self.height):
-            for u in range(self.width):
-                depth_from_points = self.depth_map[v, u]
-                depth_from_image = self.depth_data[v, u]
-                if not (np.isnan(depth_from_points) or depth_from_points == 0) and not (np.isnan(depth_from_image) or depth_from_image == 0):
-                    err_value = abs(depth_from_points - depth_from_image) / depth_from_image
-                    err_sum += err_value
-                    point_count += 1
-                    if err_value > 0.2 and err_value < 0.5:
-                        deviant20_count += 1
-                    elif err_value >= 0.5:
-                        unvalid_count += 1
-                    else:
-                        valid_count += 1
-        err_average = err_sum / point_count if point_count > 0 else 0.0
+        point_count, valid_count, deviant20_count, unvalid_count, err_average = self.dep_errors(self.depth_map, self.depth_data)
         self.get_logger().info(f"Valid points: {valid_count},{valid_count/point_count if point_count > 0 else 0:.2f}, Deviant >20%: {deviant20_count}, Invalid(Deviant>50%): {unvalid_count}, Average Error: {err_average*100:.2f}%")
 
 def main():

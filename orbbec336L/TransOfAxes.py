@@ -22,11 +22,11 @@ class PixelToCamera(Node):
         self.model = PinholeCameraModel()
         self.timelist = [0] * 10
         self.timeListHead = 0
-        self.create_subscription(CameraInfo, '/camera/color/camera_info', self.info_callback, 10)
+        self.create_subscription(CameraInfo, '/camera/depth/camera_info', self.info_init_callback, 10)
         self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, 10)
         self.get_logger().info('Waiting for camera_info and depth frames...')
 
-    def info_callback(self, msg):
+    def info_init_callback(self, msg):
         if self.cameraInfoInit:
             return
         self.model.fromCameraInfo(msg)
