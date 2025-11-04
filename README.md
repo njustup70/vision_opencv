@@ -15,10 +15,9 @@
 |模块 |说明 |
 |---|---|
 |[CameraCalibration](./CameraCalibration/)|相机标定|
-|[cv_lib](./cv_lib/)|opencv,yolo,aruco库函数存放|
-|[PoseSolver](./PoseSolver/)|pnp解算|
+|[cv_lib](./cv_lib/)|opencv,yolo,aruco,pnp库函数存放|
 |[yolo](./yolo/)|yolo模型训练|
-### 对应四个文件夹下的均设置对应readme，可参照进行使用
+### 对应三个文件夹下的均设置对应readme，可参照进行使用
 
 
 ## 问题
