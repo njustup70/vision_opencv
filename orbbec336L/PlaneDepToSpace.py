@@ -234,18 +234,19 @@ class PixelToCamera(Node):
         self.depth_img = msg
         cv2_color_img = self.depth_camera.bridge.imgmsg_to_cv2(self.color_img, desired_encoding='passthrough')
         cv2_depth_img = self.depth_camera.bridge.imgmsg_to_cv2(self.depth_img, desired_encoding='passthrough').astype(np.uint16)
+        color_resized = cv2.resize(cv2_color_img, (cv2_depth_img.shape[1], cv2_depth_img.shape[0]), interpolation=cv2.INTER_LINEAR)
         center = self.depth_camera.depthImageFindCenter(self.range, self.depth_img)
         if center is not None:
             u, v, depth, valid_points_count = center
-            print(cv2_color_img.shape, cv2_depth_img.shape)
+            print(cv2_color_img.shape, color_resized.shape)
             self.get_logger().info(f"Mass center at pixel ({u:.1f}, {v:.1f}) with depth {depth:.3f} m, valid points percent: {valid_points_count / ((self.range[2]-self.range[0])*(self.range[3]-self.range[1]))*100:.1f}%")
-            cv2.circle(cv2_color_img, (int(u), int(v)), 5, (65535,65535,0), -1) # 黄色圆点
+            cv2.circle(color_resized, (int(u), int(v)), 5, (65535,65535,0), -1) # 黄色圆点
             # 显示圆点坐标及深度
             x,y,z = pix_to_cam(u, v, depth, self.depth_camera.model_d)
-            cv2.putText(cv2_color_img, f"({x:.3f},{y:.3f},{z:.3f})", (int(u)+10, int(v)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (65535,65535,0), 1)
+            cv2.putText(color_resized, f"({x:.3f},{y:.3f},{z:.3f})", (int(u)+10, int(v)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (65535,65535,0), 1)
         # 显示选定区域
-        cv2.rectangle(cv2_color_img, (self.range[1], self.range[0]), (self.range[3], self.range[2]), (32768,32768,32768), 2)
-        cv2.imshow("Depth Image", cv2_color_img)
+        cv2.rectangle(color_resized, (self.range[1], self.range[0]), (self.range[3], self.range[2]), (32768,32768,32768), 2)
+        cv2.imshow("Color Image", color_resized)
         cv2.waitKey(1)
 
 
