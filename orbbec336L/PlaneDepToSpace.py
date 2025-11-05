@@ -1,13 +1,12 @@
-import rclpy
-from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo
 from cv_bridge import CvBridge
 import numpy as np
 from image_geometry import PinholeCameraModel
-#import time
 import yaml
-#from scipy.signal import find_peaks
-import cv2
+
+import os
+os.environ["OMP_NUM_THREADS"] = "8"
+os.environ["OPENBLAS_NUM_THREADS"] = "8"
 
 def load_camera_info(yaml_path: str) -> CameraInfo:
     with open(yaml_path, 'r') as f:
@@ -52,7 +51,7 @@ class DepthCamera:
         self.d2c_r = None
         self.d2c_t = None
         self.peak_width = 3 * self.bin_width
-        self.bin_min_percent = 0.01
+        self.bin_min_percent = 0.005
 
     def loadCameraInfo(self, info_d = None, info_c = None, info_d2c = None):
         if info_d is None:
@@ -82,18 +81,6 @@ class DepthCamera:
         pix_c = self.model_c.project3dToPixel((point_c[0], point_c[1], point_c[2]))
         return pix_c
 
-    def pixelRangeToSpace(self, range, img):
-        depth_img = self.bridge.imgmsg_to_cv2(img, desired_encoding='passthrough').astype(np.float32) / 1000.0  # Convert mm to meters
-        depth_data = np.zeros((range[2]-range[0], range[3]-range[1], 3), dtype=np.float32)
-        for v in range(range[0], range[2]):
-            for u in range(range[1], range[3]):
-                depth = depth_img[v, u]
-                X, Y, Z = pix_to_cam(u, v, depth, self.model_d)
-                depth_data[v - range[0], u - range[1], 0] = X
-                depth_data[v - range[0], u - range[1], 1] = Y
-                depth_data[v - range[0], u - range[1], 2] = Z
-        return depth_data
-    
     def depthImageFindCenter(self, box_range, img):
         depth_img = self.bridge.imgmsg_to_cv2(img, desired_encoding='passthrough').astype(np.float32) / 1000.0  # Convert mm to meters
         depth_need = depth_img[box_range[0]:box_range[2], box_range[1]:box_range[3]]
@@ -108,11 +95,7 @@ class DepthCamera:
         centers = (bin_edges[:-1] + bin_edges[1:]) / 2  # 每个bin中心
         # 寻找直方图中大于bin_min_percent的数据作为峰值
         #peaks, props = find_peaks(hist, height=0.1*depth_valid.size) # 最小高度为总点数的10%
-        peak_tmp = []
-        for i in range(len(hist)):
-            if hist[i] > self.bin_min_percent * depth_valid.size:
-                peak_tmp.append(i)
-        peaks = np.array(peak_tmp)
+        peaks = np.where(hist > self.bin_min_percent * depth_valid.size)[0]
         if len(peaks) == 0:
             print("No significant peaks found in depth histogram.")
             return
@@ -141,10 +124,10 @@ class DepthCamera:
                 'count': int(total_count),
                 'range': depth_range
             })
-            if total_count > 0.5*depth_valid.size: # 如果某个峰值占比超过50%，则认为是主要峰值
+            if total_count > 0.4*depth_valid.size: # 如果某个峰值占比超过40%，则认为是主要峰值
                 major_peak = peaks_merged[-1]
                 break
-            if total_count > 0.3*depth_valid.size and major_peak is None: # 如果某个峰值占比超过30%且没有超过50%的峰，则取深度最小的峰
+            if total_count > 0.2*depth_valid.size and major_peak is None: # 如果某个峰值占比超过20%且没有超过40%的峰，则取深度最小的峰
                 major_peak = peaks_merged[-1]
         if major_peak is None:
             major_peak = peaks_merged[0] # 否则取第一个峰
@@ -159,35 +142,23 @@ class DepthCamera:
 
     def findValidPix(self, depth_floor, depth_ceiling, img):
         depth_img = img.astype(np.float32)
-        #valid_pixels = [[0 for i in range(depth_img.shape[0])] for j in range(depth_img.shape[1])]
-        valid_pixels = np.zeros_like(depth_img, dtype=bool)
-        count = 0
-        #print(depth_img)
-        for v in range(depth_img.shape[0]):
-            for u in range(depth_img.shape[1]):
-                depth = depth_img[v, u]
-                if not np.isnan(depth) and depth >= depth_floor and depth <= depth_ceiling:
-                    valid_pixels[v, u] = 1
-                    count += 1
-        #print(f"Found {count} valid pixels in depth range [{depth_floor:.3f}, {depth_ceiling:.3f}] m.")
-        
+        valid_pixels = (depth_img >= depth_floor) & (depth_img <= depth_ceiling) & (~np.isnan(depth_img))
         return valid_pixels
     
     def findMassCenter(self, valid_pixels):
-        sum_u = 0
-        sum_v = 0
-        count = 0
-        for v in range(valid_pixels.shape[0]):
-            for u in range(valid_pixels.shape[1]):
-                if valid_pixels[v, u] == 1:
-                    sum_u += u
-                    sum_v += v
-                    count += 1
-        if count == 0:
+        ys, xs = np.nonzero(valid_pixels)
+        if len(xs) == 0:
             return None
-        center_u = sum_u / count
-        center_v = sum_v / count
+        center_u = np.mean(xs)
+        center_v = np.mean(ys)
+        count = len(xs)
         return center_u, center_v, count
+
+if __name__ == '__main__':
+    import rclpy
+    from rclpy.node import Node
+    import time
+    import cv2
 
 class PixelToCamera(Node):
     def __init__(self):
@@ -212,6 +183,9 @@ class PixelToCamera(Node):
         cv2.setMouseCallback("Color Image", self.mouse_callback)
         self.one_point_clicked = False
         self.point_chosen = [(0,0),(0,0)]
+
+        self.timelist = [0] * 10
+        self.timeListHead = 0
     '''
     def info_init_callback(self, msg):
         if self.cameraInfoInit:
@@ -231,12 +205,20 @@ class PixelToCamera(Node):
             raise TimeoutError("CameraInfo timeout")
         return future.result()
 
+    def timetest(self):
+        self.timelist[self.timeListHead] = time.time()
+        self.get_logger().info(f"time interval: {self.timelist[self.timeListHead]-self.timelist[(self.timeListHead-1)%10]:.3f} s")
+        self.get_logger().info(f"10 time average interval: {(self.timelist[self.timeListHead]-self.timelist[(self.timeListHead+1)%10])/10:.3f} s")
+        self.timeListHead = (self.timeListHead + 1) % 10
+
     def color_callback(self, msg):
         self.color_img = msg
+        #self.timetest()
 
     def depth_callback(self, msg):
         if self.color_img is None:
             return
+        #self.timetest()
         self.depth_img = msg
         cv2_color_img = self.depth_camera.bridge.imgmsg_to_cv2(self.color_img, desired_encoding='passthrough')
         cv2_depth_img = self.depth_camera.bridge.imgmsg_to_cv2(self.depth_img, desired_encoding='passthrough').astype(np.uint16)
@@ -248,7 +230,7 @@ class PixelToCamera(Node):
         center = self.depth_camera.depthImageFindCenter(self.range, self.depth_img)
         if center is not None:
             u, v, depth, valid_points_count = center
-            print(cv2_color_img.shape, color_resized.shape)
+            #print(cv2_color_img.shape, color_resized.shape)
             self.get_logger().info(f"Mass center at pixel ({u:.1f}, {v:.1f}) with depth {depth:.3f} m, valid points percent: {valid_points_count / ((self.range[2]-self.range[0])*(self.range[3]-self.range[1]))*100:.1f}%")
             cv2.circle(color_resized, (int(u), int(v)), 5, (65535,65535,0), -1) # 黄色圆点
             # 显示圆点坐标及深度
