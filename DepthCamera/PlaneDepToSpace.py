@@ -55,17 +55,17 @@ class DepthCamera:
 
     def loadCameraInfo(self, info_d = None, info_c = None, info_d2c = None):
         if info_d is None:
-            self.model_d.fromCameraInfo(load_camera_info('orbbec336L/depth_camera_info.yaml'))
+            self.model_d.fromCameraInfo(load_camera_info('DepthCamera/depth_camera_info.yaml'))
         else:
             self.model_d.fromCameraInfo(info_d)
 
         if info_c is None:
-            self.model_c.fromCameraInfo(load_camera_info('orbbec336L/color_camera_info.yaml'))
+            self.model_c.fromCameraInfo(load_camera_info('DepthCamera/color_camera_info.yaml'))
         else:
             self.model_c.fromCameraInfo(info_c)
 
         if info_d2c is None:
-            with open('orbbec336L/depth_to_color_info.yaml', 'r') as f:
+            with open('DepthCamera/depth_to_color_info.yaml', 'r') as f:
                 data = yaml.safe_load(f)
             rot = data['depth_to_color_extrinsics']['rotation']['data']
             trans = data['depth_to_color_extrinsics']['translation']['data']
