@@ -1,4 +1,4 @@
-from cv_bridge import ImagePublish_t,ImageSubscribe_t,CompressedImagePublishe_t,CompressedImageSubscribe_t
+from cv_bridge_topic import ImagePublish_t,ImageSubscribe_t,CompressedImagePublishe_t,CompressedImageSubscribe_t
 from PoseSolver import PoseSolver
 from aruco_lib import Aruco
 from yolo_lib import MyYOLO
