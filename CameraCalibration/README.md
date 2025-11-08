@@ -1,0 +1,10 @@
+# CameraCalibration
+## cal_lib
+- [camera_calibrate.py](./cal_lib/camera_calibrate.py)       
+- 相机标定代码
+- [take_photo.py](./cal_lib/take_photo.py)     
+- 简易拍照脚本
+## cal_yaml
+- 存放标定好的参数
+## calibration_img
+- 存放标定所用的图片
