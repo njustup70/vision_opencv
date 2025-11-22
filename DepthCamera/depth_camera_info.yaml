@@ -1,0 +1,33 @@
+header:
+  stamp:
+    sec: 0
+    nanosec: 0
+  frame_id: camera_color_optical_frame
+image_width: 848
+image_height: 480
+camera_name: camera
+distortion_model: plumb_bob
+camera_matrix:
+  rows: 3
+  cols: 3
+  data: [409.50067138671875, 0, 424.3312683105469, 0, 409.50067138671875, 241.32501220703125, 0, 0, 1]
+distortion_coefficients:
+  rows: 1
+  cols: 8
+  data: [0, 0, 0, 0, 0, 0, 0, 0]
+rectification_matrix:
+  rows: 3
+  cols: 3
+  data: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+projection_matrix:
+  rows: 3
+  cols: 4
+  data: [409.50067138671875, 0, 424.3312683105469, 0, 0, 409.50067138671875, 241.32501220703125, 0, 0, 0, 1, 0]
+binning_x: 0
+binning_y: 0
+roi:
+  x_offset: 0
+  y_offset: 0
+  height: 0
+  width: 0
+  do_rectify: true
