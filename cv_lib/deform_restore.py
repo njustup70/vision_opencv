@@ -13,9 +13,10 @@ dist_coeffs = np.array([
 def get3dPoints(center, shape):
     '''
     计算平面四个顶点相机坐标系下的3D坐标
-    center: 平面中心点的3D相对坐标 (x, y, z)
-    shape: 平面的宽高和法向量 (width, height, (nx, ny, nz))
-    return: 4个顶点的3D坐标，按顺时针顺序排列
+    
+    :param center:  平面中心点的3D相对坐标 (x, y, z)
+    :param shape:   平面的宽高和法向量 (width, height, (nx, ny, nz))
+    :return: 4个顶点的3D坐标，按顺时针顺序排列 :type:`np.ndarray` (4x3)
     '''
     w, h, n = shape
     # 平面自身局部坐标（以中心为原点）
@@ -47,12 +48,13 @@ def get3dPoints(center, shape):
 def trans3DToPlane(points_3d, camera_matrix = camera_matrix, dist_coeffs = dist_coeffs, rvec=None, tvec=None):
     '''
     将3D点投影到图像平面上
-    points_3d: Nx3的3D点数组,顺时针
-    camera_matrix: 相机内参矩阵
-    dist_coeffs: 相机畸变系数
-    rvec: 旋转向量 (可选)
-    tvec: 平移向量 (可选)
-    return: 投影后的2D点数组 Nx2
+
+    :param points_3d:       Nx3的3D点数组,顺时针 排列 :type:`np.ndarray` (4x3)
+    :param camera_matrix:   相机内参矩阵
+    :param dist_coeffs:     相机畸变系数
+    :param rvec:            旋转向量 (可选)
+    :param tvec:            平移向量 (可选)
+    :return: 投影后的2D点数组 Nx2
     '''
     camera_matrix = np.array(camera_matrix, dtype=np.float64).reshape(3, 3)
     if rvec is None:
@@ -65,9 +67,11 @@ def trans3DToPlane(points_3d, camera_matrix = camera_matrix, dist_coeffs = dist_
 def ROIRestore(img, points_2d, image_shape = [500,500]):
     '''
     根据投影的2D点计算图像的边界框,展开到原图像
-    points_2d: Nx2的2D点数组
-    image_shape: 需要图像的形状 (height, width)
-    return: 还原展开后图像
+
+    :param img:         输入图像 :cpp:type:`sensor_msgs::Image`
+    :param points_2d:   Nx2的2D点数组 :type:`np.ndarray`
+    :param image_shape: 需要图像的形状 (height, width)
+    :return: 还原展开后图像 :type:`np.ndarray`
     '''
     w_out = image_shape[1]
     h_out = image_shape[0]
@@ -84,15 +88,16 @@ def ROIRestore(img, points_2d, image_shape = [500,500]):
 def deformRestore(img, point, shape, camera_matrix = camera_matrix, dist_coeffs = dist_coeffs, rvec=None, tvec=None, image_shape = [500,500]):
     ''' 
     根据3D点和相机参数还原图像
-    img: 输入图像
-    point: 平面中心点的3D相对坐标 (x, y, z)
-    shape: 平面的宽高和法向量 (width, height, (nx, ny, nz))
-    camera_matrix: 相机内参矩阵
-    dist_coeffs: 相机畸变系数
-    rvec: 旋转向量 (外参可选)
-    tvec: 平移向量 (外参可选)
-    image_shape: 需要图像的形状 (height, width)
-    return: 还原展开后图像
+
+    :param img:             输入图像 :cpp:type:`sensor_msgs::Image`
+    :param point:           平面中心点的3D相对坐标 (x, y, z)
+    :param shape:           平面的宽高和法向量 (width, height, (nx, ny, nz))
+    :param camera_matrix:   相机内参矩阵
+    :param dist_coeffs:     相机畸变系数
+    :param rvec:            旋转向量 (外参可选)
+    :param tvec:            平移向量 (外参可选)
+    :param image_shape:     需要图像的形状 (height, width)
+    :return: 还原展开后图像
     '''
     camera_matrix = np.array(camera_matrix, dtype=np.float64).reshape(3, 3)
     points_3d = get3dPoints(point, shape)
