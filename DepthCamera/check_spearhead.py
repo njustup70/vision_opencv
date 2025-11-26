@@ -23,7 +23,7 @@ def rot_y(deg):
 R_box_cam = rot_y(00) @ rot_x(-0)
 
 # 立方体中心在相机前方1m
-T_box_cam = np.array([0, 0, 1.0])
+T_box_cam = np.array([0, 0.28, 1.11])
 
 # 子区域局部中心（立方体坐标系）
 x_centers = np.array([-0.5, -0.3, -0.1, 0.1, 0.3, 0.5])  # m
@@ -34,16 +34,12 @@ T_local_centers = np.stack([x_centers,
 # 尺寸半长
 hx, hy, hz = 0.10, 0.15, 0.15  # 200x300x300 mm
 
-def filter_rotated_subboxes(pts_world, Rcw, Twc):
+def filter_rotated_subboxes(pts_cam):
     '''
     过滤出落在旋转立方体六个子区域内的点
-    :param pts_world:   Nx3的3D点数组 :type:`np.ndarray`
-    :param Rcw:         相机到世界的旋转矩阵 3x3 :type:`np.ndarray`
-    :param Twc:         世界到相机的平移向量 1x3 :type:`np.ndarray`
+    :param pts_cam:   Nx3的3D点数组 :type:`np.ndarray`
     :return: 6个布尔数组，表示每个点是否落在对应子区域内 :type:`List[np.ndarray]`
     '''
-    # 世界→相机
-    pts_cam = (pts_world - Twc) @ Rcw.T
 
     results = []
 
@@ -173,7 +169,75 @@ class DepthCamera:
             rot = info_d2c['rotation']
             trans = info_d2c['translation']
         self.d2c_r = np.array(rot).reshape(3, 3)
-        self.d2c_t = np.array(trans).reshape(3, 1)
+        self.d2c_t = np.array(trans).reshape(3,)
+
+def resize_intrinsics(model, new_w, new_h):
+    old_w = model.width
+    old_h = model.height
+    sx = new_w / old_w
+    sy = new_h / old_h
+    K = model.K.copy()
+    P = model.P.copy()
+    K[0, 0] *= sx    # fx
+    K[1, 1] *= sy    # fy
+    K[0, 2] *= sx    # cx
+    K[1, 2] *= sy    # cy
+    P[0, 0] *= sx
+    P[1, 1] *= sy
+    P[0, 2] *= sx
+    P[1, 2] *= sy
+    model.width = new_w
+    model.height = new_h
+
+    model.K = K
+    model.P = P
+
+    model._intrinsicMatrix = K
+    model._fullIntrinsicMatrix = K
+    model._projectionMatrix = P
+
+    return model
+
+def shift_depth_by_target(depth_img, model_d, d2c_r, d2c_t, T_box_cam):
+    """
+    根据目标在相机坐标中的 3D 位置，通过深度→彩色外参计算图像平移偏移量，
+    返回平移后的深度图（空洞为 NaN）
+
+    depth_img: (H, W) 深度图 ndarray
+    model_d: 深度内参对象，需提供 project3dToPixel()
+    d2c_r: (3,3) 深度到彩色旋转矩阵
+    d2c_t: (3,)  深度到彩色平移向量
+    T_box_cam: (3,) 目标在深度相机坐标系下的位置
+    """
+
+    H, W = depth_img.shape
+    T_box_cam = np.asarray(T_box_cam).reshape(3)
+    ud, vd = model_d.project3dToPixel(T_box_cam)
+    T_color = d2c_r @ T_box_cam + d2c_t
+    uc, vc = model_d.project3dToPixel(T_color)
+    dx = uc - ud
+    dy = vc - vd
+    x0 = int(round(dx))
+    y0 = int(round(dy))
+    depth_img = depth_img.astype(np.float64)
+    depth_img[depth_img <= 0] = np.nan
+    shifted = np.full_like(depth_img, np.nan)
+
+    if x0 >= 0:
+        xs_src = slice(0, W - x0)
+        xs_dst = slice(x0, W)
+    else:
+        xs_src = slice(-x0, W)
+        xs_dst = slice(0, W + x0)
+    if y0 >= 0:
+        ys_src = slice(0, H - y0)
+        ys_dst = slice(y0, H)
+    else:
+        ys_src = slice(-y0, H)
+        ys_dst = slice(0, H + y0)
+    shifted[ys_dst, xs_dst] = depth_img[ys_src, xs_src]
+
+    return shifted, (dx, dy)
 
 class PixelToCamera(Node):
     def __init__(self):
@@ -226,11 +290,19 @@ class PixelToCamera(Node):
         cv2_color_img = self.depth_camera.bridge.imgmsg_to_cv2(self.color_img, desired_encoding='passthrough')
         cv2_depth_img = self.depth_camera.bridge.imgmsg_to_cv2(self.depth_img, desired_encoding='passthrough').astype(np.uint16)
         color_resized = cv2.resize(cv2_color_img, (cv2_depth_img.shape[1], cv2_depth_img.shape[0]), interpolation=cv2.INTER_LINEAR)
+        self.depth_camera.model_c = resize_intrinsics(
+            self.depth_camera.model_c,
+            cv2_depth_img.shape[1],
+            cv2_depth_img.shape[0]
+        )
+        depth_trans, (dx,dy) = shift_depth_by_target(cv2_depth_img, self.depth_camera.model_d, self.depth_camera.d2c_r, self.depth_camera.d2c_t, T_box_cam)
+        dx = int(round(dx))
+        dy = int(round(dy))
         # 深度图叠加到彩色图，颜色表示深度
-        depth_colored = cv2.applyColorMap(cv2.convertScaleAbs(cv2_depth_img, alpha=0.03), cv2.COLORMAP_JET)
+        depth_colored = cv2.applyColorMap(cv2.convertScaleAbs(depth_trans, alpha=0.03), cv2.COLORMAP_JET)
         overlay = cv2.addWeighted(color_resized, 0.6, depth_colored, 0.4, 0)
         color_resized = overlay
-        uv_boxes = project_subboxes(self.depth_camera.model_d)
+        uv_boxes = project_subboxes(self.depth_camera.model_c)
         # 转为整数
         for i, uv in enumerate(uv_boxes):
             uv = uv.astype(int)
@@ -242,7 +314,7 @@ class PixelToCamera(Node):
                 cv2.line(color_resized, tuple(uv[j]), tuple(uv[4+(j+1-4)%4]), (0,255,0), 2)
             for j in range(4):
                 cv2.line(color_resized, tuple(uv[j]), tuple(uv[j+4]), (0,255,0), 1)
-        suit_clouds = filter_rotated_subboxes(self.point_cloud, self.depth_camera.d2c_r, self.depth_camera.d2c_t.flatten())
+        suit_clouds = filter_rotated_subboxes(self.point_cloud)
         color = 0
         colors = [
             (0, 0, 255),    # 红
@@ -255,7 +327,9 @@ class PixelToCamera(Node):
         for suit_cloud in suit_clouds:
             suit_cloud = self.point_cloud[suit_cloud]
             for pt in suit_cloud:
-                px, py = self.depth_camera.model_d.project3dToPixel(pt)
+                px, py = self.depth_camera.model_c.project3dToPixel(pt)
+                px += dx
+                py -= dy
                 cv2.circle(color_resized, (int(px), int(py)), 2, colors[color], -1)
             color += 1
         cv2.imshow("Color Image", color_resized)
