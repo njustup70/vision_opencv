@@ -198,46 +198,38 @@ def resize_intrinsics(model, new_w, new_h):
 
     return model
 
-def shift_depth_by_target(depth_img, model_d, d2c_r, d2c_t, T_box_cam):
-    """
-    根据目标在相机坐标中的 3D 位置，通过深度→彩色外参计算图像平移偏移量，
-    返回平移后的深度图（空洞为 NaN）
+def get_offset_target(model_d, d2c_r, d2c_t, T_box_cam):
 
-    depth_img: (H, W) 深度图 ndarray
-    model_d: 深度内参对象，需提供 project3dToPixel()
-    d2c_r: (3,3) 深度到彩色旋转矩阵
-    d2c_t: (3,)  深度到彩色平移向量
-    T_box_cam: (3,) 目标在深度相机坐标系下的位置
-    """
-
-    H, W = depth_img.shape
     T_box_cam = np.asarray(T_box_cam).reshape(3)
     ud, vd = model_d.project3dToPixel(T_box_cam)
     T_color = d2c_r @ T_box_cam + d2c_t
     uc, vc = model_d.project3dToPixel(T_color)
     dx = uc - ud
     dy = vc - vd
-    x0 = int(round(dx))
-    y0 = int(round(dy))
+
+    return dx, dy
+
+def shift_depth_by_offset(depth_img, dx, dy):
+    H, W = depth_img.shape
     depth_img = depth_img.astype(np.float64)
     depth_img[depth_img <= 0] = np.nan
     shifted = np.full_like(depth_img, np.nan)
 
-    if x0 >= 0:
-        xs_src = slice(0, W - x0)
-        xs_dst = slice(x0, W)
+    if dx >= 0:
+        xs_src = slice(0, W - dx)
+        xs_dst = slice(dx, W)
     else:
-        xs_src = slice(-x0, W)
-        xs_dst = slice(0, W + x0)
-    if y0 >= 0:
-        ys_src = slice(0, H - y0)
-        ys_dst = slice(y0, H)
+        xs_src = slice(-dx, W)
+        xs_dst = slice(0, W + dx)
+    if dy >= 0:
+        ys_src = slice(0, H - dy)
+        ys_dst = slice(dy, H)
     else:
-        ys_src = slice(-y0, H)
-        ys_dst = slice(0, H + y0)
+        ys_src = slice(-dy, H)
+        ys_dst = slice(0, H + dy)
     shifted[ys_dst, xs_dst] = depth_img[ys_src, xs_src]
 
-    return shifted, (dx, dy)
+    return shifted
 
 class PixelToCamera(Node):
     def __init__(self):
@@ -251,6 +243,12 @@ class PixelToCamera(Node):
             self.get_logger().warn('Timeout waiting for /camera/depth/camera_info, loading from YAML instead.')
         self.depth_camera = DepthCamera()
         self.depth_camera.loadCameraInfo(info_d=self.info_msg)
+        self.dx, self.dy = get_offset_target(
+            self.depth_camera.model_d,
+            self.depth_camera.d2c_r,
+            self.depth_camera.d2c_t,
+            T_box_cam
+        )
         self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, 10)
         self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, 10)
         self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, 10)
@@ -279,6 +277,9 @@ class PixelToCamera(Node):
 
     def pc_callback(self, msg):
         self.point_cloud = pc2.read_points_numpy(msg, field_names=("x","y","z"))
+        # 用外参偏移点云
+        pc_color = (self.depth_camera.d2c_r @ self.point_cloud.T).T + self.depth_camera.d2c_t
+        self.point_cloud = pc_color
 
     def depth_callback(self, msg):
         if self.color_img is None:
@@ -295,9 +296,9 @@ class PixelToCamera(Node):
             cv2_depth_img.shape[1],
             cv2_depth_img.shape[0]
         )
-        depth_trans, (dx,dy) = shift_depth_by_target(cv2_depth_img, self.depth_camera.model_d, self.depth_camera.d2c_r, self.depth_camera.d2c_t, T_box_cam)
-        dx = int(round(dx))
-        dy = int(round(dy))
+        dx = int(round(self.dx))
+        dy = int(round(self.dy))
+        depth_trans = shift_depth_by_offset(cv2_depth_img, dx, dy)
         # 深度图叠加到彩色图，颜色表示深度
         depth_colored = cv2.applyColorMap(cv2.convertScaleAbs(depth_trans, alpha=0.03), cv2.COLORMAP_JET)
         overlay = cv2.addWeighted(color_resized, 0.6, depth_colored, 0.4, 0)
@@ -328,8 +329,6 @@ class PixelToCamera(Node):
             suit_cloud = self.point_cloud[suit_cloud]
             for pt in suit_cloud:
                 px, py = self.depth_camera.model_c.project3dToPixel(pt)
-                px += dx
-                py -= dy
                 cv2.circle(color_resized, (int(px), int(py)), 2, colors[color], -1)
             color += 1
         cv2.imshow("Color Image", color_resized)
