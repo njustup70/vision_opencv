@@ -3,6 +3,30 @@ import numpy as np
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from cv_bridge import CvBridge
 
+# 子区域局部中心（立方体坐标系）
+x_centers = np.array([-0.5, -0.3, -0.1, 0.1, 0.3, 0.5])  # m
+T_local_centers = np.stack([x_centers,
+                            np.zeros_like(x_centers),
+                            np.zeros_like(x_centers)], axis=1)
+
+# 尺寸半长
+hx, hy, hz = 0.10, 0.10, 0.15  # 200x200x300 mm 左右宽*上下高*前后长 需要适当修改 
+
+def check_spearhead(pc, model, T_box_cam, R_box_cam):
+    '''
+    检查点云中每个子区域的点数是否满足要求
+
+    :param pc: 点云数据 :type:`sensor_msgs.msg.PointCloud2`
+    :param model: 相机模型 :type:`DepthCamera`
+    :param T_box_cam: 立方体中心在相机坐标系的位置 :type:`np.ndarray` (右， 下， 前)
+    :param R_box_cam: 立方体相对于相机的旋转矩阵 :type:`np.ndarray` (俯角， 右转角)
+    :return: 每个子区域是否满足点数要求的布尔列表 :type:`List[bool]`
+    '''
+    depth_pc = pc2.read_points_numpy(pc, field_names=("x","y","z"))
+    counts, _ = filter_rotated_subboxes(depth_pc, T_box_cam, R_box_cam, model)
+    counts_check = [c >= 50 for c in counts]  # 每个子区域至少50个点
+    return counts_check
+
 def rot_x(deg):
     rad = np.deg2rad(deg)
     return np.array([
@@ -19,22 +43,7 @@ def rot_y(deg):
         [-np.sin(rad),0,np.cos(rad)]
     ])
 
-# 立方体相对于相机的旋转：俯视5° + 向右90°
-R_box_cam = rot_y(00) @ rot_x(-0)
-
-# 立方体中心在相机前方1m
-T_box_cam = np.array([0, 0.28, 1.11])
-
-# 子区域局部中心（立方体坐标系）
-x_centers = np.array([-0.5, -0.3, -0.1, 0.1, 0.3, 0.5])  # m
-T_local_centers = np.stack([x_centers,
-                            np.zeros_like(x_centers),
-                            np.zeros_like(x_centers)], axis=1)
-
-# 尺寸半长
-hx, hy, hz = 0.10, 0.15, 0.15  # 200x300x300 mm
-
-def filter_rotated_subboxes(pts_cam):
+def filter_rotated_subboxes(pc_dep, T_box_cam, R_box_cam, model):
     '''
     过滤出落在旋转立方体六个子区域内的点
     :param pts_cam:   Nx3的3D点数组 :type:`np.ndarray`
@@ -42,41 +51,44 @@ def filter_rotated_subboxes(pts_cam):
     '''
 
     results = []
+    counts = []
+
+    pc_color = (model.d2c_r @ pc_dep.T).T + model.d2c_t
 
     for i in range(6):
         # 相机坐标下的子区域中心
         T_i_cam = T_box_cam + (R_box_cam @ T_local_centers[i])
 
         # 相机→子区域局部
-        pts_i = (pts_cam - T_i_cam) @ R_box_cam.T
+        pts_i = (pc_color - T_i_cam) @ R_box_cam.T
 
         mask = (
             (np.abs(pts_i[:,0]) <= hx) &
             (np.abs(pts_i[:,1]) <= hy) &
             (np.abs(pts_i[:,2]) <= hz)
         )
+        count = mask.sum()
+        counts.append(count)
+        results.append(pc_color[mask])
 
-        results.append(mask)
+    return counts, results
 
-    return results  # 返回 6 个 mask
+# def project_points(Pc, K):
+#     """
+#     投影3D点到像素平面
+#     Pc: Nx3 相机坐标点，K: 3x3 内参
+#     """
+#     x = Pc[:,0]
+#     y = Pc[:,1]
+#     z = Pc[:,2]
+#     u = K[0,0]*x/z + K[0,2]
+#     v = K[1,1]*y/z + K[1,2]
+#     return np.stack([u,v], axis=1)
 
-# ---------------------------
-# 投影函数
-# ---------------------------
-def project_points(Pc, K):
-    """Pc: Nx3 相机坐标点，K: 3x3 内参"""
-    x = Pc[:,0]
-    y = Pc[:,1]
-    z = Pc[:,2]
-    u = K[0,0]*x/z + K[0,2]
-    v = K[1,1]*y/z + K[1,2]
-    return np.stack([u,v], axis=1)
-
-# ---------------------------
-# 生成每个子框在像素上的8点投影
-# ---------------------------
-def project_subboxes(model):
+def project_subboxes(model, T_box_cam, R_box_cam):
     """
+    生成每个子框在像素上的8点投影
+    
     返回: list of [8×2] 的像素坐标数组
     """
     uv_boxes = []
@@ -135,13 +147,6 @@ def load_camera_info(yaml_path: str) -> CameraInfo:
     msg.roi.do_rectify = roi.get('do_rectify', False)
     return msg
 
-def pix_to_cam(u, v, depth, model):
-    ray = model.projectPixelTo3dRay((u, v))
-    muit = 1.0 / ray[2]
-    X = ray[0] * muit * depth
-    Y = ray[1] * muit * depth
-    Z = ray[2] * muit * depth # Z = depth
-    return X, Y, Z
 
 class DepthCamera:
     def __init__(self):
@@ -149,11 +154,7 @@ class DepthCamera:
         self.model_d = PinholeCameraModel()
         self.model_c = PinholeCameraModel()
 
-    def loadCameraInfo(self, info_d = None, info_c = None, info_d2c = None):
-        if info_d is None:
-            self.model_d.fromCameraInfo(load_camera_info('DepthCamera/depth_camera_info.yaml'))
-        else:
-            self.model_d.fromCameraInfo(info_d)
+    def loadCameraInfo(self, info_c = None, info_d2c = None):
 
         if info_c is None:
             self.model_c.fromCameraInfo(load_camera_info('DepthCamera/color_camera_info.yaml'))
@@ -198,116 +199,77 @@ def resize_intrinsics(model, new_w, new_h):
 
     return model
 
-def get_offset_target(model_d, d2c_r, d2c_t, T_box_cam):
+# def get_offset_target(model_d, d2c_r, d2c_t, T_box_cam):
+#     T_box_cam = np.asarray(T_box_cam).reshape(3)
+#     ud, vd = model_d.project3dToPixel(T_box_cam)
+#     T_color = d2c_r @ T_box_cam + d2c_t
+#     uc, vc = model_d.project3dToPixel(T_color)
+#     dx = uc - ud
+#     dy = vc - vd
+#     return dx, dy
 
-    T_box_cam = np.asarray(T_box_cam).reshape(3)
-    ud, vd = model_d.project3dToPixel(T_box_cam)
-    T_color = d2c_r @ T_box_cam + d2c_t
-    uc, vc = model_d.project3dToPixel(T_color)
-    dx = uc - ud
-    dy = vc - vd
-
-    return dx, dy
-
-def shift_depth_by_offset(depth_img, dx, dy):
-    H, W = depth_img.shape
-    depth_img = depth_img.astype(np.float64)
-    depth_img[depth_img <= 0] = np.nan
-    shifted = np.full_like(depth_img, np.nan)
-
-    if dx >= 0:
-        xs_src = slice(0, W - dx)
-        xs_dst = slice(dx, W)
-    else:
-        xs_src = slice(-dx, W)
-        xs_dst = slice(0, W + dx)
-    if dy >= 0:
-        ys_src = slice(0, H - dy)
-        ys_dst = slice(dy, H)
-    else:
-        ys_src = slice(-dy, H)
-        ys_dst = slice(0, H + dy)
-    shifted[ys_dst, xs_dst] = depth_img[ys_src, xs_src]
-
-    return shifted
+# def shift_depth_by_offset(depth_img, dx, dy):
+#     H, W = depth_img.shape
+#     depth_img = depth_img.astype(np.float64)
+#     depth_img[depth_img <= 0] = np.nan
+#     shifted = np.full_like(depth_img, np.nan)
+#     if dx >= 0:
+#         xs_src = slice(0, W - dx)
+#         xs_dst = slice(dx, W)
+#     else:
+#         xs_src = slice(-dx, W)
+#         xs_dst = slice(0, W + dx)
+#     if dy >= 0:
+#         ys_src = slice(0, H - dy)
+#         ys_dst = slice(dy, H)
+#     else:
+#         ys_src = slice(-dy, H)
+#         ys_dst = slice(0, H + dy)
+#     shifted[ys_dst, xs_dst] = depth_img[ys_src, xs_src]
+#     return shifted
 
 class PixelToCamera(Node):
     def __init__(self):
         super().__init__('pixel_to_camera')
         self.info_msg = None
-        self.get_logger().info('Waiting for /camera/depth/camera_info...')
-        try:
-            self.info_msg = self.wait_for_camera_info()
-            self.get_logger().info('Loaded camera info from topic.')
-        except TimeoutError:
-            self.get_logger().warn('Timeout waiting for /camera/depth/camera_info, loading from YAML instead.')
         self.depth_camera = DepthCamera()
-        self.depth_camera.loadCameraInfo(info_d=self.info_msg)
-        self.dx, self.dy = get_offset_target(
-            self.depth_camera.model_d,
-            self.depth_camera.d2c_r,
-            self.depth_camera.d2c_t,
-            T_box_cam
-        )
-        self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, 10)
+        self.depth_camera.loadCameraInfo()
         self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, 10)
         self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, 10)
-        self.get_logger().info('Waiting for camera_info and depth frames...')
-        self.depth_img = None
+        self.get_logger().info('Waiting for color frames...')
         self.color_img = None
-        self.point_cloud = None
+        self.suit_pc = None
+        self.counts = None
+        self.shape =[848,480]
+        # 立方体中心在相机前方1.0m, 向下0.33m
+        self.T_box_cam = np.array([0, 0.33, 1.0])
+        # 立方体相对于相机的旋转：俯视0° + 向右0°
+        self.R_box_cam = rot_y(00) @ rot_x(-0)
 
         cv2.namedWindow("Color Image")
 
-    def wait_for_camera_info(self, timeout_sec=1.0):
-        #阻塞等待一次 /camera/depth/camera_info 消息
-        future = rclpy.task.Future()
-        def callback(msg):
-            if not future.done():
-                future.set_result(msg)
-        self.create_subscription(CameraInfo, '/camera/depth/camera_info', callback, 10)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
-        if not future.done():
-            raise TimeoutError("CameraInfo timeout")
-        return future.result()
+    def pc_callback(self, msg):
+        depth_pc = pc2.read_points_numpy(msg, field_names=("x","y","z"))
+        # 用外参偏移点云
+        
+        self.counts, self.suit_pc = filter_rotated_subboxes(depth_pc, self.T_box_cam, self.R_box_cam, self.depth_camera)
 
     def color_callback(self, msg):
+        if self.suit_pc is None:
+            return
         self.color_img = msg
-        #self.timetest()
-
-    def pc_callback(self, msg):
-        self.point_cloud = pc2.read_points_numpy(msg, field_names=("x","y","z"))
-        # 用外参偏移点云
-        pc_color = (self.depth_camera.d2c_r @ self.point_cloud.T).T + self.depth_camera.d2c_t
-        self.point_cloud = pc_color
-
-    def depth_callback(self, msg):
-        if self.color_img is None:
-            return
-        if self.point_cloud is None:
-            return
-        #self.timetest()
-        self.depth_img = msg
         cv2_color_img = self.depth_camera.bridge.imgmsg_to_cv2(self.color_img, desired_encoding='passthrough')
-        cv2_depth_img = self.depth_camera.bridge.imgmsg_to_cv2(self.depth_img, desired_encoding='passthrough').astype(np.uint16)
-        color_resized = cv2.resize(cv2_color_img, (cv2_depth_img.shape[1], cv2_depth_img.shape[0]), interpolation=cv2.INTER_LINEAR)
+        cv2_img_bgr = cv2.cvtColor(cv2_color_img, cv2.COLOR_RGB2BGR)
+        color_resized = cv2.resize(cv2_img_bgr, (self.shape[0], self.shape[1]), interpolation=cv2.INTER_LINEAR)
         self.depth_camera.model_c = resize_intrinsics(
             self.depth_camera.model_c,
-            cv2_depth_img.shape[1],
-            cv2_depth_img.shape[0]
+            self.shape[0],
+            self.shape[1]
         )
-        dx = int(round(self.dx))
-        dy = int(round(self.dy))
-        depth_trans = shift_depth_by_offset(cv2_depth_img, dx, dy)
-        # 深度图叠加到彩色图，颜色表示深度
-        depth_colored = cv2.applyColorMap(cv2.convertScaleAbs(depth_trans, alpha=0.03), cv2.COLORMAP_JET)
-        overlay = cv2.addWeighted(color_resized, 0.6, depth_colored, 0.4, 0)
-        color_resized = overlay
-        uv_boxes = project_subboxes(self.depth_camera.model_c)
+        uv_boxes = project_subboxes(self.depth_camera.model_c, self.T_box_cam, self.R_box_cam)
         # 转为整数
         for i, uv in enumerate(uv_boxes):
             uv = uv.astype(int)
-
             # 画边（角点顺序按四边形连接）
             for j in range(4):
                 cv2.line(color_resized, tuple(uv[j]), tuple(uv[(j+1)%4]), (0,255,0), 2)
@@ -315,7 +277,6 @@ class PixelToCamera(Node):
                 cv2.line(color_resized, tuple(uv[j]), tuple(uv[4+(j+1-4)%4]), (0,255,0), 2)
             for j in range(4):
                 cv2.line(color_resized, tuple(uv[j]), tuple(uv[j+4]), (0,255,0), 1)
-        suit_clouds = filter_rotated_subboxes(self.point_cloud)
         color = 0
         colors = [
             (0, 0, 255),    # 红
@@ -325,21 +286,52 @@ class PixelToCamera(Node):
             (255, 0, 255),  # 紫
             (255, 255, 0),  # 青
         ]
-        for suit_cloud in suit_clouds:
-            suit_cloud = self.point_cloud[suit_cloud]
+        for suit_cloud in self.suit_pc:
             for pt in suit_cloud:
                 px, py = self.depth_camera.model_c.project3dToPixel(pt)
                 cv2.circle(color_resized, (int(px), int(py)), 2, colors[color], -1)
             color += 1
+            cv2.putText(color_resized, f'Count: {self.counts[color-1]}', (10, 30 + 30 * (color-1)), cv2.FONT_HERSHEY_SIMPLEX, 1, colors[color-1], 2)
         cv2.imshow("Color Image", color_resized)
         cv2.waitKey(1)
 
-    
+class PixelToCamera_t(Node):
+    def __init__(self):
+        super().__init__('pixel_to_camera_t')
+        self.info_msg = None
+        self.depth_camera = DepthCamera()
+        self.depth_camera.loadCameraInfo()
+        self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, 10)
+        self.get_logger().info('Waiting for color frames...')
+        self.color_img = None
+        self.suit_pc = None
+        self.counts = None
+        self.shape =[848,480]
+        self.box_check = None
+        # 立方体中心在相机前方1.0m, 向下0.33m
+        self.T_box_cam = np.array([0, 0.33, 1.0])
+        # 立方体相对于相机的旋转：俯视0° + 向右0°
+        self.R_box_cam = rot_y(00) @ rot_x(-0)
 
+        cv2.namedWindow("Color Image")
+
+    def pc_callback(self, msg):
+        box_check_t = check_spearhead(msg, self.depth_camera, self.T_box_cam, self.R_box_cam)
+        if box_check_t != self.box_check:
+            self.box_check = box_check_t
+            print("Box check changed:", self.box_check)
+    
 
 def main():
     rclpy.init()
     node = PixelToCamera()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+def main1():
+    rclpy.init()
+    node = PixelToCamera_t()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
