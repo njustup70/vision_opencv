@@ -2,6 +2,13 @@ import yaml
 import numpy as np
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from cv_bridge import CvBridge
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+
+qos = QoSProfile(
+    depth=1,  # 只保留最新一帧
+    reliability=QoSReliabilityPolicy.RELIABLE,  # 尽量保证丢帧而不阻塞
+    history=QoSHistoryPolicy.KEEP_LAST          # 只保存最后 depth 帧
+)
 
 # 子区域局部中心（立方体坐标系）
 x_centers = np.array([-0.5, -0.3, -0.1, 0.1, 0.3, 0.5])  # m
@@ -54,24 +61,25 @@ def filter_rotated_subboxes(pc_dep, T_box_cam, R_box_cam, model):
     counts = []
 
     pc_color = (model.d2c_r @ pc_dep.T).T + model.d2c_t
+    pc_rot = pc_color @ R_box_cam.T
+
 
     for i in range(6):
-        # 相机坐标下的子区域中心
-        T_i_cam = T_box_cam + (R_box_cam @ T_local_centers[i])
+        # 子区域中心
+        T_i_cam = T_box_cam + R_box_cam @ T_local_centers[i]
+        tx, ty, tz = T_i_cam
 
-        # 相机→子区域局部
-        pts_i = (pc_color - T_i_cam) @ R_box_cam.T
-
+        # 直接比较，不构造 pts_i
         mask = (
-            (np.abs(pts_i[:,0]) <= hx) &
-            (np.abs(pts_i[:,1]) <= hy) &
-            (np.abs(pts_i[:,2]) <= hz)
+            (np.abs(pc_rot[:,0] - tx) <= hx) &
+            (np.abs(pc_rot[:,1] - ty) <= hy) &
+            (np.abs(pc_rot[:,2] - tz) <= hz)
         )
-        count = mask.sum()
-        counts.append(count)
-        results.append(pc_color[mask])
 
+        counts.append(mask.sum())
+        results.append(pc_color[mask])
     return counts, results
+
 
 # def project_points(Pc, K):
 #     """
@@ -228,14 +236,25 @@ def resize_intrinsics(model, new_w, new_h):
 #     shifted[ys_dst, xs_dst] = depth_img[ys_src, xs_src]
 #     return shifted
 
+def get_FPS(timelist, timeListHead):
+    time_now = time.time()
+    timelist[timeListHead] = time_now
+    timeListHead = (timeListHead + 1) % len(timelist)
+    time_diff = time_now - timelist[timeListHead]
+    if time_diff == 0:
+        fps = 0.0
+    else:
+        fps = len(timelist) / time_diff
+    return fps, timelist, timeListHead
+
 class PixelToCamera(Node):
     def __init__(self):
         super().__init__('pixel_to_camera')
         self.info_msg = None
         self.depth_camera = DepthCamera()
         self.depth_camera.loadCameraInfo()
-        self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, 10)
-        self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, 10)
+        self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, qos)
+        self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, qos)
         self.get_logger().info('Waiting for color frames...')
         self.color_img = None
         self.suit_pc = None
@@ -245,6 +264,8 @@ class PixelToCamera(Node):
         self.T_box_cam = np.array([0, 0.33, 1.0])
         # 立方体相对于相机的旋转：俯视0° + 向右0°
         self.R_box_cam = rot_y(00) @ rot_x(-0)
+        self.timelist = [0] * 10
+        self.timeListHead = 0
 
         cv2.namedWindow("Color Image")
 
@@ -257,6 +278,8 @@ class PixelToCamera(Node):
     def color_callback(self, msg):
         if self.suit_pc is None:
             return
+        time_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        time0 = time.time()
         self.color_img = msg
         cv2_color_img = self.depth_camera.bridge.imgmsg_to_cv2(self.color_img, desired_encoding='passthrough')
         cv2_img_bgr = cv2.cvtColor(cv2_color_img, cv2.COLOR_RGB2BGR)
@@ -266,6 +289,8 @@ class PixelToCamera(Node):
             self.shape[0],
             self.shape[1]
         )
+        fps, self.timelist, self.timeListHead = get_FPS(self.timelist, self.timeListHead)
+        cv2.putText(color_resized, f'FPS: {fps:.2f}', (self.shape[0] - 100, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
         uv_boxes = project_subboxes(self.depth_camera.model_c, self.T_box_cam, self.R_box_cam)
         # 转为整数
         for i, uv in enumerate(uv_boxes):
@@ -287,11 +312,33 @@ class PixelToCamera(Node):
             (255, 255, 0),  # 青
         ]
         for suit_cloud in self.suit_pc:
-            for pt in suit_cloud:
-                px, py = self.depth_camera.model_c.project3dToPixel(pt)
-                cv2.circle(color_resized, (int(px), int(py)), 2, colors[color], -1)
+            pts = suit_cloud  # Nx3
+
+            fx = self.depth_camera.model_c.fx()
+            fy = self.depth_camera.model_c.fy()
+            cx = self.depth_camera.model_c.cx()
+            cy = self.depth_camera.model_c.cy()
+
+            # vectorized projection
+            px = fx * pts[:, 0] / pts[:, 2] + cx
+            py = fy * pts[:, 1] / pts[:, 2] + cy
+            pts_int = np.vstack([px, py]).T.astype(np.int32)
+
+            # fastest-point drawing (direct pixel assign)
+            valid = (
+                (pts_int[:,0] >= 0) & (pts_int[:,0] < color_resized.shape[1]) &
+                (pts_int[:,1] >= 0) & (pts_int[:,1] < color_resized.shape[0])
+            )
+
+            pts_valid = pts_int[valid]
+            color_resized[pts_valid[:,1], pts_valid[:,0]] = colors[color]
+
             color += 1
             cv2.putText(color_resized, f'Count: {self.counts[color-1]}', (10, 30 + 30 * (color-1)), cv2.FONT_HERSHEY_SIMPLEX, 1, colors[color-1], 2)
+        time_delay = time.time() - time_stamp
+        cv2.putText(color_resized, f'Delay: {time_delay*1000:.1f} ms', (10, self.shape[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        time_cost = time.time() - time0
+        cv2.putText(color_resized, f'Cost: {time_cost*1000:.1f} ms', (self.shape[0]-200, self.shape[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
         cv2.imshow("Color Image", color_resized)
         cv2.waitKey(1)
 
@@ -321,6 +368,97 @@ class PixelToCamera_t(Node):
             self.box_check = box_check_t
             print("Box check changed:", self.box_check)
     
+class PixelToCamera_tt(Node):
+    def __init__(self):
+        super().__init__('pixel_to_camera')
+        self.info_msg = None
+        self.depth_camera = DepthCamera()
+        self.depth_camera.loadCameraInfo()
+        self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, qos)
+        self.get_logger().info('Waiting for color frames...')
+        self.suit_pc = None
+        self.counts = None
+        self.shape =[848,480]
+        self.img = np.zeros((self.shape[1], self.shape[0], 3), dtype=np.uint8)
+        # 立方体中心在相机前方1.0m, 向下0.33m
+        self.T_box_cam = np.array([0, 0.33, 1.0])
+        # 立方体相对于相机的旋转：俯视0° + 向右0°
+        self.R_box_cam = rot_y(00) @ rot_x(-0)
+        self.timelist = [0] * 10
+        self.timeListHead = 0
+
+        cv2.namedWindow("Color Image")
+
+    def pc_callback(self, msg):
+        time_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        time0 = time.time()
+        depth_pc = pc2.read_points_numpy(msg, field_names=("x","y","z"))
+        # 用外参偏移点云
+        
+        self.counts, self.suit_pc = filter_rotated_subboxes(depth_pc, self.T_box_cam, self.R_box_cam, self.depth_camera)
+
+        if self.suit_pc is None:
+            return
+        cv2_color_img = self.img
+        cv2_img_bgr = cv2.cvtColor(cv2_color_img, cv2.COLOR_RGB2BGR)
+        color_resized = cv2.resize(cv2_img_bgr, (self.shape[0], self.shape[1]), interpolation=cv2.INTER_LINEAR)
+        self.depth_camera.model_c = resize_intrinsics(
+            self.depth_camera.model_c,
+            self.shape[0],
+            self.shape[1]
+        )
+        fps, self.timelist, self.timeListHead = get_FPS(self.timelist, self.timeListHead)
+        cv2.putText(color_resized, f'FPS: {fps:.2f}', (self.shape[0] - 100, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        uv_boxes = project_subboxes(self.depth_camera.model_c, self.T_box_cam, self.R_box_cam)
+        # 转为整数
+        for i, uv in enumerate(uv_boxes):
+            uv = uv.astype(int)
+            # 画边（角点顺序按四边形连接）
+            for j in range(4):
+                cv2.line(color_resized, tuple(uv[j]), tuple(uv[(j+1)%4]), (0,255,0), 2)
+            for j in range(4, 8):
+                cv2.line(color_resized, tuple(uv[j]), tuple(uv[4+(j+1-4)%4]), (0,255,0), 2)
+            for j in range(4):
+                cv2.line(color_resized, tuple(uv[j]), tuple(uv[j+4]), (0,255,0), 1)
+        color = 0
+        colors = [
+            (0, 0, 255),    # 红
+            (0, 255, 0),    # 绿
+            (255, 0, 0),    # 蓝
+            (0, 255, 255),  # 黄
+            (255, 0, 255),  # 紫
+            (255, 255, 0),  # 青
+        ]
+        for suit_cloud in self.suit_pc:
+            pts = suit_cloud  # Nx3
+
+            fx = self.depth_camera.model_c.fx()
+            fy = self.depth_camera.model_c.fy()
+            cx = self.depth_camera.model_c.cx()
+            cy = self.depth_camera.model_c.cy()
+
+            # vectorized projection
+            px = fx * pts[:, 0] / pts[:, 2] + cx
+            py = fy * pts[:, 1] / pts[:, 2] + cy
+            pts_int = np.vstack([px, py]).T.astype(np.int32)
+
+            # fastest-point drawing (direct pixel assign)
+            valid = (
+                (pts_int[:,0] >= 0) & (pts_int[:,0] < color_resized.shape[1]) &
+                (pts_int[:,1] >= 0) & (pts_int[:,1] < color_resized.shape[0])
+            )
+
+            pts_valid = pts_int[valid]
+            color_resized[pts_valid[:,1], pts_valid[:,0]] = colors[color]
+
+            color += 1
+            cv2.putText(color_resized, f'Count: {self.counts[color-1]}', (10, 30 + 30 * (color-1)), cv2.FONT_HERSHEY_SIMPLEX, 1, colors[color-1], 2)
+        time_delay = time.time() - time_stamp
+        cv2.putText(color_resized, f'Delay: {time_delay*1000:.1f} ms', (10, self.shape[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        time_cost = time.time() - time0
+        cv2.putText(color_resized, f'Cost: {time_cost*1000:.1f} ms', (self.shape[0]-200, self.shape[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        cv2.imshow("Color Image", color_resized)
+        cv2.waitKey(1)
 
 def main():
     rclpy.init()
@@ -336,5 +474,12 @@ def main1():
     node.destroy_node()
     rclpy.shutdown()
 
+def main2():
+    rclpy.init()
+    node = PixelToCamera_tt()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
 if __name__ == '__main__':
-    main()
+    main2()
