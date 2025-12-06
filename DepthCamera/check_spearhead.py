@@ -127,6 +127,7 @@ if __name__ == '__main__':
     import cv2
     from image_geometry import PinholeCameraModel
     import sensor_msgs_py.point_cloud2 as pc2
+    import threading
 
 
 def load_camera_info(yaml_path: str) -> CameraInfo:
@@ -253,8 +254,8 @@ class PixelToCamera(Node):
         self.info_msg = None
         self.depth_camera = DepthCamera()
         self.depth_camera.loadCameraInfo()
-        self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, qos)
-        self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, qos)
+        self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, 10)
+        self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, 10)
         self.get_logger().info('Waiting for color frames...')
         self.color_img = None
         self.suit_pc = None
@@ -374,9 +375,10 @@ class PixelToCamera_tt(Node):
         self.info_msg = None
         self.depth_camera = DepthCamera()
         self.depth_camera.loadCameraInfo()
-        self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, qos)
-        self.get_logger().info('Waiting for color frames...')
+        self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, 10)
+        self.get_logger().info('Waiting for PC frames...')
         self.suit_pc = None
+        self.pc = None
         self.counts = None
         self.shape =[848,480]
         self.img = np.zeros((self.shape[1], self.shape[0], 3), dtype=np.uint8)
@@ -386,79 +388,93 @@ class PixelToCamera_tt(Node):
         self.R_box_cam = rot_y(00) @ rot_x(-0)
         self.timelist = [0] * 10
         self.timeListHead = 0
+        self.final_img = None
+        threading.Thread(target=self.pc_worker, daemon=True).start()
 
         cv2.namedWindow("Color Image")
 
     def pc_callback(self, msg):
-        time_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
-        time0 = time.time()
-        depth_pc = pc2.read_points_numpy(msg, field_names=("x","y","z"))
-        # 用外参偏移点云
+        self.pc = msg
+        if self.final_img is not None:
+            cv2.imshow("Color Image", self.final_img)
+            cv2.waitKey(1)
         
-        self.counts, self.suit_pc = filter_rotated_subboxes(depth_pc, self.T_box_cam, self.R_box_cam, self.depth_camera)
 
-        if self.suit_pc is None:
-            return
-        cv2_color_img = self.img
-        cv2_img_bgr = cv2.cvtColor(cv2_color_img, cv2.COLOR_RGB2BGR)
-        color_resized = cv2.resize(cv2_img_bgr, (self.shape[0], self.shape[1]), interpolation=cv2.INTER_LINEAR)
-        self.depth_camera.model_c = resize_intrinsics(
-            self.depth_camera.model_c,
-            self.shape[0],
-            self.shape[1]
-        )
-        fps, self.timelist, self.timeListHead = get_FPS(self.timelist, self.timeListHead)
-        cv2.putText(color_resized, f'FPS: {fps:.2f}', (self.shape[0] - 100, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        uv_boxes = project_subboxes(self.depth_camera.model_c, self.T_box_cam, self.R_box_cam)
-        # 转为整数
-        for i, uv in enumerate(uv_boxes):
-            uv = uv.astype(int)
-            # 画边（角点顺序按四边形连接）
-            for j in range(4):
-                cv2.line(color_resized, tuple(uv[j]), tuple(uv[(j+1)%4]), (0,255,0), 2)
-            for j in range(4, 8):
-                cv2.line(color_resized, tuple(uv[j]), tuple(uv[4+(j+1-4)%4]), (0,255,0), 2)
-            for j in range(4):
-                cv2.line(color_resized, tuple(uv[j]), tuple(uv[j+4]), (0,255,0), 1)
-        color = 0
-        colors = [
-            (0, 0, 255),    # 红
-            (0, 255, 0),    # 绿
-            (255, 0, 0),    # 蓝
-            (0, 255, 255),  # 黄
-            (255, 0, 255),  # 紫
-            (255, 255, 0),  # 青
-        ]
-        for suit_cloud in self.suit_pc:
-            pts = suit_cloud  # Nx3
+    def pc_worker(self):
+        while True:
+            if self.pc is None:
+                continue
+            msg = self.pc
+            self.pc = None
+            time_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+            time0 = time.time()
+            depth_pc = pc2.read_points_numpy(msg, field_names=("x","y","z"))
+            # 用外参偏移点云
+            
+            self.counts, self.suit_pc = filter_rotated_subboxes(depth_pc, self.T_box_cam, self.R_box_cam, self.depth_camera)
 
-            fx = self.depth_camera.model_c.fx()
-            fy = self.depth_camera.model_c.fy()
-            cx = self.depth_camera.model_c.cx()
-            cy = self.depth_camera.model_c.cy()
-
-            # vectorized projection
-            px = fx * pts[:, 0] / pts[:, 2] + cx
-            py = fy * pts[:, 1] / pts[:, 2] + cy
-            pts_int = np.vstack([px, py]).T.astype(np.int32)
-
-            # fastest-point drawing (direct pixel assign)
-            valid = (
-                (pts_int[:,0] >= 0) & (pts_int[:,0] < color_resized.shape[1]) &
-                (pts_int[:,1] >= 0) & (pts_int[:,1] < color_resized.shape[0])
+            if self.suit_pc is None:
+                continue
+            cv2_color_img = self.img
+            cv2_img_bgr = cv2.cvtColor(cv2_color_img, cv2.COLOR_RGB2BGR)
+            color_resized = cv2.resize(cv2_img_bgr, (self.shape[0], self.shape[1]), interpolation=cv2.INTER_LINEAR)
+            self.depth_camera.model_c = resize_intrinsics(
+                self.depth_camera.model_c,
+                self.shape[0],
+                self.shape[1]
             )
+            fps, self.timelist, self.timeListHead = get_FPS(self.timelist, self.timeListHead)
+            cv2.putText(color_resized, f'FPS: {fps:.2f}', (self.shape[0] - 100, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            uv_boxes = project_subboxes(self.depth_camera.model_c, self.T_box_cam, self.R_box_cam)
+            # 转为整数
+            for i, uv in enumerate(uv_boxes):
+                uv = uv.astype(int)
+                # 画边（角点顺序按四边形连接）
+                for j in range(4):
+                    cv2.line(color_resized, tuple(uv[j]), tuple(uv[(j+1)%4]), (0,255,0), 2)
+                for j in range(4, 8):
+                    cv2.line(color_resized, tuple(uv[j]), tuple(uv[4+(j+1-4)%4]), (0,255,0), 2)
+                for j in range(4):
+                    cv2.line(color_resized, tuple(uv[j]), tuple(uv[j+4]), (0,255,0), 1)
+            color = 0
+            colors = [
+                (0, 0, 255),    # 红
+                (0, 255, 0),    # 绿
+                (255, 0, 0),    # 蓝
+                (0, 255, 255),  # 黄
+                (255, 0, 255),  # 紫
+                (255, 255, 0),  # 青
+            ]
+            for suit_cloud in self.suit_pc:
+                pts = suit_cloud  # Nx3
 
-            pts_valid = pts_int[valid]
-            color_resized[pts_valid[:,1], pts_valid[:,0]] = colors[color]
+                fx = self.depth_camera.model_c.fx()
+                fy = self.depth_camera.model_c.fy()
+                cx = self.depth_camera.model_c.cx()
+                cy = self.depth_camera.model_c.cy()
 
-            color += 1
-            cv2.putText(color_resized, f'Count: {self.counts[color-1]}', (10, 30 + 30 * (color-1)), cv2.FONT_HERSHEY_SIMPLEX, 1, colors[color-1], 2)
-        time_delay = time.time() - time_stamp
-        cv2.putText(color_resized, f'Delay: {time_delay*1000:.1f} ms', (10, self.shape[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        time_cost = time.time() - time0
-        cv2.putText(color_resized, f'Cost: {time_cost*1000:.1f} ms', (self.shape[0]-200, self.shape[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        cv2.imshow("Color Image", color_resized)
-        cv2.waitKey(1)
+                # vectorized projection
+                px = fx * pts[:, 0] / pts[:, 2] + cx
+                py = fy * pts[:, 1] / pts[:, 2] + cy
+                pts_int = np.vstack([px, py]).T.astype(np.int32)
+
+                # fastest-point drawing (direct pixel assign)
+                valid = (
+                    (pts_int[:,0] >= 0) & (pts_int[:,0] < color_resized.shape[1]) &
+                    (pts_int[:,1] >= 0) & (pts_int[:,1] < color_resized.shape[0])
+                )
+
+                pts_valid = pts_int[valid]
+                color_resized[pts_valid[:,1], pts_valid[:,0]] = colors[color]
+
+                color += 1
+                cv2.putText(color_resized, f'Count: {self.counts[color-1]}', (10, 30 + 30 * (color-1)), cv2.FONT_HERSHEY_SIMPLEX, 1, colors[color-1], 2)
+            time_delay = time.time() - time_stamp
+            cv2.putText(color_resized, f'Delay: {time_delay*1000:.1f} ms', (10, self.shape[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            time_cost = time.time() - time0
+            cv2.putText(color_resized, f'Cost: {time_cost*1000:.1f} ms', (self.shape[0]-200, self.shape[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            self.final_img = color_resized
+            
 
 def main():
     rclpy.init()
