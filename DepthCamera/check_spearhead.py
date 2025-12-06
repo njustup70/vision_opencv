@@ -163,12 +163,17 @@ class DepthCamera:
         self.model_d = PinholeCameraModel()
         self.model_c = PinholeCameraModel()
 
-    def loadCameraInfo(self, info_c = None, info_d2c = None):
+    def loadCameraInfo(self, info_c = None, info_d = None, info_d2c = None):
 
         if info_c is None:
             self.model_c.fromCameraInfo(load_camera_info('DepthCamera/color_camera_info.yaml'))
         else:
             self.model_c.fromCameraInfo(info_c)
+
+        if info_d is None:
+            self.model_d.fromCameraInfo(load_camera_info('DepthCamera/depth_camera_info.yaml'))
+        else:
+            self.model_d.fromCameraInfo(info_d)
 
         if info_d2c is None:
             with open('DepthCamera/depth_to_color_info.yaml', 'r') as f:
@@ -375,10 +380,11 @@ class PixelToCamera_tt(Node):
         self.info_msg = None
         self.depth_camera = DepthCamera()
         self.depth_camera.loadCameraInfo()
-        self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, 10)
-        self.get_logger().info('Waiting for PC frames...')
+        self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, qos)
+        self.get_logger().info('Waiting for depth frames...')
         self.suit_pc = None
         self.pc = None
+        self.depth_image = None
         self.counts = None
         self.shape =[848,480]
         self.img = np.zeros((self.shape[1], self.shape[0], 3), dtype=np.uint8)
@@ -389,26 +395,56 @@ class PixelToCamera_tt(Node):
         self.timelist = [0] * 10
         self.timeListHead = 0
         self.final_img = None
+        self.delay = 0.0
+        self.depth_ready = threading.Event()
+        self.pc_ready = threading.Event()
         threading.Thread(target=self.pc_worker, daemon=True).start()
+        threading.Thread(target=self.dep2pc_worker, daemon=True).start()
 
         cv2.namedWindow("Color Image")
 
-    def pc_callback(self, msg):
-        self.pc = msg
+    def depth_callback(self, msg):
+        self.depth_image = msg
+        self.depth_ready.set()
         if self.final_img is not None:
             cv2.imshow("Color Image", self.final_img)
             cv2.waitKey(1)
         
+    def dep2pc_worker(self):
+        while True:
+            if self.depth_camera.model_d.P is None:
+                continue
+            self.depth_ready.wait()  # 阻塞直到收到新数据
+            depth = self.depth_camera.bridge.imgmsg_to_cv2(self.depth_image, desired_encoding='passthrough').astype(np.float32) / 1000.0
+            self.depth_ready.clear()
+            time_stamp = self.depth_image.header.stamp.sec + self.depth_image.header.stamp.nanosec * 1e-9
+            self.depth_image = None
+            fx = self.depth_camera.model_d.fx()
+            fy = self.depth_camera.model_d.fy()
+            cx = self.depth_camera.model_d.cx()
+            cy = self.depth_camera.model_d.cy()
+            mask = (depth > 0)
+            v, u = np.nonzero(mask)
+            d = depth[v, u]
+
+            x = (u - cx) * d / fx
+            y = (v - cy) * d / fy
+            z = d
+
+            self.pc = np.column_stack((x, y, z))
+            self.pc_ready.set()
+            self.delay = time.time() - time_stamp
+
 
     def pc_worker(self):
         while True:
-            if self.pc is None:
-                continue
+            self.pc_ready.wait()
             msg = self.pc
-            self.pc = None
-            time_stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+            self.pc_ready.clear()
             time0 = time.time()
-            depth_pc = pc2.read_points_numpy(msg, field_names=("x","y","z"))
+            #depth_pc = pc2.read_points_numpy(msg, field_names=("x","y","z"))
+            depth_pc = msg
+            pc_count = depth_pc.shape[0]
             # 用外参偏移点云
             
             self.counts, self.suit_pc = filter_rotated_subboxes(depth_pc, self.T_box_cam, self.R_box_cam, self.depth_camera)
@@ -425,6 +461,7 @@ class PixelToCamera_tt(Node):
             )
             fps, self.timelist, self.timeListHead = get_FPS(self.timelist, self.timeListHead)
             cv2.putText(color_resized, f'FPS: {fps:.2f}', (self.shape[0] - 100, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            cv2.putText(color_resized, f'Points: {pc_count}', (10, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
             uv_boxes = project_subboxes(self.depth_camera.model_c, self.T_box_cam, self.R_box_cam)
             # 转为整数
             for i, uv in enumerate(uv_boxes):
@@ -469,7 +506,7 @@ class PixelToCamera_tt(Node):
 
                 color += 1
                 cv2.putText(color_resized, f'Count: {self.counts[color-1]}', (10, 30 + 30 * (color-1)), cv2.FONT_HERSHEY_SIMPLEX, 1, colors[color-1], 2)
-            time_delay = time.time() - time_stamp
+            time_delay = self.delay
             cv2.putText(color_resized, f'Delay: {time_delay*1000:.1f} ms', (10, self.shape[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
             time_cost = time.time() - time0
             cv2.putText(color_resized, f'Cost: {time_cost*1000:.1f} ms', (self.shape[0]-200, self.shape[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
