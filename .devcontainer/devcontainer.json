@@ -15,10 +15,11 @@
                 "augustocdias.tasks-shell-input",
                 "ms-vscode.cpptools",
                 "ms-python.python",
-                "ms-iot.vscode-ros",
                 "njpwerner.autodocstring",
                 "vadimcn.vscode-lldb",
-                "llvm-vs-code-extensions.lldb-dap"
+                "llvm-vs-code-extensions.lldb-dap",
+                "donjayamanne.githistory",
+                "mhutchie.git-graph"
             ]
         },
         "jetbrains": {
