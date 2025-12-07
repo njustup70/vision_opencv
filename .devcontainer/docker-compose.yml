@@ -4,8 +4,8 @@ services:
     # build:
     #   context: ..
     #   dockerfile: .devcontainer/Dockerfile
-    image: yc-dlan/rc2026:yolo-ros #cpu镜像
-    container_name: yolo_container_cpu
+    image: elainasuki/rc2026:yolo-ros #cpu镜像
+    container_name: yolo_ros_dev
     environment:
       - DISPLAY=${DISPLAY}
       - NVIDIA_VISIBLE_DEVICES=all
@@ -16,7 +16,7 @@ services:
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
-      - ./../..:/home/Elaina/yolo
+      - ./..:/home/Elaina/yolo
       - /dev:/dev
     network_mode: host
     pid: "host" # 添加 pid 命名空间共享
@@ -24,6 +24,6 @@ services:
     privileged: true
     stdin_open: true
     tty: true
-    user: "Elaina" 
+    user: "Elaina"
     # runtime: "nvidia"
     working_dir: "/home/Elaina/yolo" # 指定默认工作目录
