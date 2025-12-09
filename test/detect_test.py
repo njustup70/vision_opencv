@@ -5,7 +5,11 @@ import numpy as np
 from threading import Thread, Lock
 from queue import Queue
 import queue
-from aruco_lib import Aruco
+import sys
+
+cv_lib_dir = "/home/fishros/commun_ws/src/vision_opencv"
+sys.path.append(os.path.abspath(cv_lib_dir))
+from cv_lib.aruco_lib import Aruco
 
 # ------------------------------
 # 配置参数
