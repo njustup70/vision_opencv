@@ -27,3 +27,5 @@ basket_seg/labels.txt
 
 *.MP4
 *.svg
+
+runs/detect/
