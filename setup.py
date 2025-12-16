@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'camera_node = test.qr_kfs.camera_node:main',
             'qr_detect_node = test.qr_kfs.qr_detect_node:main',
+            'qr_test_node = test.qr_kfs.qr_test_node:main',
         ],
     },
 )
