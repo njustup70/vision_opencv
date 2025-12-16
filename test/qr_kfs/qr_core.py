@@ -29,11 +29,11 @@ class QRCoder:
         qr = qrcode.QRCode(
             version=2, 
             error_correction=qrcode.constants.ERROR_CORRECT_H,
-            box_size=pixel_size // 25,
-            border=6
+            box_size=10, 
+            border=4
         )
         qr.add_data(hex_str)
-        qr.make()
+        qr.make(fit=True)
         
         # 保存
         os.makedirs(save_dir, exist_ok=True)
@@ -41,14 +41,23 @@ class QRCoder:
         path = os.path.join(save_dir, filename)
         
         img = qr.make_image(fill_color="black", back_color="white")
+        current_size = img.size[0]
+        if current_size != pixel_size:
+            print(f"🔧 调整尺寸: {current_size} -> {pixel_size}")
+            img = img.resize((pixel_size, pixel_size))
         img.save(path, dpi=(dpi, dpi))
-        
-        # 二值化处理
+
         img_cv = cv2.imread(path)
         if img_cv is not None:
+            h, w = img_cv.shape[:2]
+            print(f"✅ 最终二维码尺寸: {w}x{h}像素")
+        
+        # 二值化处理
             gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
             _, binary_img = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
             cv2.imwrite(path, binary_img)
+        else:
+            print(f"❌ 无法读取生成的二维码")
         
         return path, hex_str
     
