@@ -54,7 +54,7 @@ class QRDetectNode(Node):
                 cv2.imshow("QR Player", img)
                 
                 start = time.time()
-                while (time.time() - start) * 1000 < 100:
+                while (time.time() - start) * 1000 < 200:
                     if cv2.waitKey(1) & 0xFF == ord('q'):
                         break
                 

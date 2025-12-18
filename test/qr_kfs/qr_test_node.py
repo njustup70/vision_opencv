@@ -29,7 +29,7 @@ class QRPortableTest(Node):
             Image,
             'camera/image_raw',
             self.callback,
-            10
+            100
         )
         
         print("="*50)
@@ -74,7 +74,6 @@ class QRPortableTest(Node):
         else:
             print(f"      KFS状态:")
         
-        # 每6个状态一行显示
         for i in range(0, 12, 6):
             line = "        "
             for j in range(6):
@@ -84,29 +83,22 @@ class QRPortableTest(Node):
                     line += f"{pos:2d}:{state}  "
             print(line)
     
-    def get_portable_screen_info(self):
-        """返回便携屏信息 - 根据你提供的信息硬编码"""
-        # XWAYLAND2: 2160x1440+2560+0
-        return {
+    def create_portable_window(self):
+        """在便携屏上创建窗口"""
+        screen = {
             'width': 2160,
             'height': 1440,
             'x': 2560,
             'y': 0,
             'name': 'XWAYLAND2'
         }
-    
-    def create_portable_window(self):
-        """在便携屏上创建窗口"""
-        screen = self.get_portable_screen_info()
         
         print(f"便携屏: {screen['name']} {screen['width']}x{screen['height']}")
         print(f"位置: ({screen['x']}, {screen['y']})")
         
         window_name = "QR Portable Test"
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-        
         cv2.moveWindow(window_name, screen['x'], screen['y'])
-        
         cv2.resizeWindow(window_name, screen['width'], screen['height'])
         cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, 1)
         
@@ -117,21 +109,6 @@ class QRPortableTest(Node):
         
         return window_name, screen, blank
     
-    def calculate_qr_display_size(self, qr_img, screen):
-        """计算二维码显示尺寸 - 确保15cm物理尺寸"""
-        qr_h, qr_w = qr_img.shape[:2]
-        print(f"  二维码原始尺寸: {qr_w}x{qr_h}像素")
-        screen_dpi = 261
-        
-        target_pixels = int(15 * screen_dpi / 2.54)
-        print(f"  15cm对应的像素数: {target_pixels}px (DPI: {screen_dpi})")
-        
-        max_size = min(screen['width'], screen['height']) * 0.8
-        target_pixels = min(target_pixels, int(max_size))
-        
-        print(f"  最终显示尺寸: {target_pixels}x{target_pixels}像素")
-        return target_pixels
-    
     def show_qr_code(self, window_name, screen, blank, qr_img, qr_index, duration_ms):
         """显示二维码"""
         if qr_img is None:
@@ -139,20 +116,23 @@ class QRPortableTest(Node):
             return False
         
         try:
-            display_size = self.calculate_qr_display_size(qr_img, screen)
+            qr_h, qr_w = qr_img.shape[:2]
+            print(f"  QR{qr_index+1}原始尺寸: {qr_w}x{qr_h}像素")
             
-            img_resized = cv2.resize(qr_img, (display_size, display_size), 
-                                    interpolation=cv2.INTER_NEAREST)
-            
-            x = (screen['width'] - display_size) // 2
-            y = (screen['height'] - display_size) // 2
+            x = (screen['width'] - qr_w) // 2
+            y = (screen['height'] - qr_h) // 2
+            print(f"  显示位置: ({x}, {y})")
             
             frame = blank.copy()
-            frame[y:y+display_size, x:x+display_size] = img_resized
+            frame[y:y+qr_h, x:x+qr_w] = qr_img
             
             label = f"QR Code {qr_index + 1}"
             cv2.putText(frame, label, (x + 20, y + 40),
                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 2)
+            
+            size_text = f"Size: {qr_w}x{qr_h}px (Original)"
+            cv2.putText(frame, size_text, (x + 20, y + qr_h - 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
             
             cv2.imshow(window_name, frame)
             cv2.waitKey(10)
@@ -170,6 +150,8 @@ class QRPortableTest(Node):
             
         except Exception as e:
             print(f"❌ 显示错误: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def print_qr_info(self, hex_str, label):
@@ -191,9 +173,9 @@ class QRPortableTest(Node):
             print(f"QR1状态序列: {qr1_states}")
             path1, data1 = QRCoder.encode(
                 qr1_states,
-                size_cm=15,
+                size_cm=7,
                 save_dir="./test_qr_codes",
-                dpi=300
+                dpi=250
             )
             img1 = cv2.imread(path1)
             
@@ -202,9 +184,9 @@ class QRPortableTest(Node):
             print(f"\nQR2状态序列: {qr2_states}")
             path2, data2 = QRCoder.encode(
                 qr2_states,
-                size_cm=15,
+                size_cm=7,
                 save_dir="./test_qr_codes",
-                dpi=300
+                dpi=250
             )
             img2 = cv2.imread(path2)
             
