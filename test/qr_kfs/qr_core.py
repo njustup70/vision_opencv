@@ -10,7 +10,7 @@ class QRCoder:
     RESERVE_BITS = "00000000"
     
     @classmethod
-    def encode(cls, states, size_cm=15, dpi=250, save_dir="./qr_codes"):
+    def encode(cls, states, size_cm, dpi, save_dir="./qr_codes"):
         """编码状态为二维码"""
         if len(states) != 12:
             raise ValueError("需要12个状态")
@@ -32,7 +32,7 @@ class QRCoder:
             version=2, 
             error_correction=qrcode.constants.ERROR_CORRECT_H,
             box_size=box_size,
-            border=4
+            border=2
         )
         qr.add_data(hex_str)
         qr.make(fit=True)
@@ -82,7 +82,7 @@ class QRCoder:
 # if __name__ == "__main__":
     # 测试编码
     # states = ["空", "R1", "R2", "假", "空", "空", "R1", "R2", "假", "空", "R1", "R2"]
-    # path, hex_str = QRCoder.encode(states, size_cm=15, dpi=250)
+    # path, hex_str = QRCoder.encode(states, size_cm=10, dpi=220)
     # print(f"生成文件: {path}")
     # print(f"十六进制: {hex_str}")
     

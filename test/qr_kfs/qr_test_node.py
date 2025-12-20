@@ -25,16 +25,9 @@ class QRPortableTest(Node):
         self.detections = []
         self.is_testing = False
         
-        self.subscription = self.create_subscription(
-            Image,
-            'camera/image_raw',
-            self.callback,
-            100
-        )
+        self.subscription = self.create_subscription(Image,'camera/image_raw',self.callback,100)
         
-        print("="*50)
         print("便携屏QR通信测试")
-        print("="*50)
     
     def callback(self, msg):
         """检测二维码并解码KFS状态"""
@@ -49,7 +42,6 @@ class QRPortableTest(Node):
                 data = qr_codes[0].data.decode().strip()
                 self.detections.append(data)
                 
-                # 解码并打印KFS状态
                 states = QRCoder.decode(data)
                 if states:
                     if len(self.qr_data) >= 2:
@@ -85,13 +77,7 @@ class QRPortableTest(Node):
     
     def create_portable_window(self):
         """在便携屏上创建窗口"""
-        screen = {
-            'width': 2160,
-            'height': 1440,
-            'x': 2560,
-            'y': 0,
-            'name': 'XWAYLAND2'
-        }
+        screen = {'width': 2160,'height': 1440,'x': 2560,'y': 0,'name': 'XWAYLAND0'}
         
         print(f"便携屏: {screen['name']} {screen['width']}x{screen['height']}")
         print(f"位置: ({screen['x']}, {screen['y']})")
@@ -126,19 +112,9 @@ class QRPortableTest(Node):
             frame = blank.copy()
             frame[y:y+qr_h, x:x+qr_w] = qr_img
             
-            label = f"QR Code {qr_index + 1}"
-            cv2.putText(frame, label, (x + 20, y + 40),
-                       cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 2)
-            
-            size_text = f"Size: {qr_w}x{qr_h}px (Original)"
-            cv2.putText(frame, size_text, (x + 20, y + qr_h - 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
-            
             cv2.imshow(window_name, frame)
             cv2.waitKey(10)
-            
-            print(f"  ✅ 显示{label} ({duration_ms}ms)")
-            
+
             start_time = time.time()
             while (time.time() - start_time) * 1000 < duration_ms:
                 if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -173,9 +149,9 @@ class QRPortableTest(Node):
             print(f"QR1状态序列: {qr1_states}")
             path1, data1 = QRCoder.encode(
                 qr1_states,
-                size_cm=7,
+                size_cm=15,
                 save_dir="./test_qr_codes",
-                dpi=250
+                dpi=220
             )
             img1 = cv2.imread(path1)
             
@@ -184,9 +160,9 @@ class QRPortableTest(Node):
             print(f"\nQR2状态序列: {qr2_states}")
             path2, data2 = QRCoder.encode(
                 qr2_states,
-                size_cm=7,
+                size_cm=15,
                 save_dir="./test_qr_codes",
-                dpi=250
+                dpi=220
             )
             img2 = cv2.imread(path2)
             
@@ -265,15 +241,6 @@ class QRPortableTest(Node):
                 cv2.imshow(window_name, blank)
                 cv2.waitKey(1)
                 time.sleep(1)
-            
-            # 每5次显示统计
-            if (i + 1) % 5 == 0:
-                rate = (success / total * 100) if total > 0 else 0
-                print(f"\n📊 当前统计 ({total}次):")
-                print(f"  成功率: {rate:.1f}%")
-                print(f"  QR1识别: {qr1_count}/{total}")
-                print(f"  QR2识别: {qr2_count}/{total}")
-                print("-" * 30)
 
         print("\n" + "="*50)
         print("测试完成")
@@ -327,8 +294,6 @@ def main():
         import traceback
         traceback.print_exc()
     finally:
-        rclpy.shutdown()
-        cv2.destroyAllWindows()
         print("\n测试结束")
 
 if __name__ == '__main__':
