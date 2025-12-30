@@ -3,6 +3,9 @@ import deform_restore as rs
 import cv2
 import numpy as np
 
+def img_preprocess(img):
+    pass 
+
 def get_yolo_result(model, img, roi_3d):
     roi_2d = rs.trans3DToPlane(roi_3d)
     roi_img = rs.ROIRestore(img, roi_2d, image_shape=[500,500])
@@ -44,10 +47,10 @@ class CameraToPixel(Node):
     def color_callback(self, msg):
         color_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8').astype(np.uint8)
         roi_3d = np.array([
-            [-0.25, -0.25, 0],
-            [0.25, -0.25, 0],
-            [0.25, 0.25, 0],    
-            [-0.25, 0.25, 0]
+            [-0.5, -0.5, 0],
+            [0.5, -0.5, 0],
+            [0.5, 0.5, 0],    
+            [-0.5, 0.5, 0]
         ], dtype=np.float32)
         result, roi_img, roi_2d = get_yolo_result(self.yolo_model, color_img, roi_3d)
         # 绘制roi区域
@@ -58,9 +61,14 @@ class CameraToPixel(Node):
         scale_x = (roi_2d[1][0] - roi_2d[0][0]) / 500
         scale_y = (roi_2d[3][1] - roi_2d[0][1]) / 500
         if len(result[0].boxes) > 0:
-            cls = result[0].boxes.cls[0]  # 第一个检测框的类别
-            conf = result[0].boxes.conf[0]  # 第一个检测框的置信度
-            label = f"{self.yolo_model.names[int(cls)]}: {conf:.2f}"
+            cls1 = result[0].boxes.cls[0]  # 第一个检测框的类别
+            conf1 = result[0].boxes.conf[0]  # 第一个检测框的置信度
+            label = f"{self.yolo_model.names[int(cls1)]}: {conf1:.2f}"
+            if len(result[0].boxes.cls) > 1:
+                cls2 = result[0].boxes.cls[1]
+                conf2 = result[0].boxes.conf[1]
+                label2 = f"{self.yolo_model.names[int(cls2)]}: {conf2:.2f}"
+                label = label + " | " + label2
             xyxy = result[0].boxes.xyxy[0].cpu().numpy().astype(int)
             x1, y1, x2, y2 = xyxy
             x1 = x1 * scale_x + roi_2d[0][0]
@@ -74,7 +82,7 @@ class CameraToPixel(Node):
             print("没有检测到目标")
             label = "No detection"
         cv2.putText(color_img, str(label), (int(roi_2d[0][0]), int(roi_2d[0][1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
-            
+        cv2.namedWindow("Color Image", cv2.WINDOW_NORMAL)
         cv2.imshow("Color Image", color_img)
         #async_print(f"Processing time: {time.time() - time_tmp}")
         cv2.waitKey(1)

@@ -160,102 +160,102 @@ if __name__ == '__main__':
     import time
     import cv2
 
-class PixelToCamera(Node):
-    def __init__(self):
-        super().__init__('pixel_to_camera')
-        self.info_msg = None
-        self.get_logger().info('Waiting for /camera/depth/camera_info...')
-        try:
-            self.info_msg = self.wait_for_camera_info()
-            self.get_logger().info('Loaded camera info from topic.')
-        except TimeoutError:
-            self.get_logger().warn('Timeout waiting for /camera/depth/camera_info, loading from YAML instead.')
-        self.depth_camera = DepthCamera()
-        self.depth_camera.loadCameraInfo(info_d=self.info_msg)
-        self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, 10)
-        self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, 10)
-        self.get_logger().info('Waiting for camera_info and depth frames...')
-        self.depth_img = None
-        self.color_img = None
-        self.range = [103,485,247,535] # test range [左上，右下]
+    class PixelToCamera(Node):
+        def __init__(self):
+            super().__init__('pixel_to_camera')
+            self.info_msg = None
+            self.get_logger().info('Waiting for /camera/depth/camera_info...')
+            try:
+                self.info_msg = self.wait_for_camera_info()
+                self.get_logger().info('Loaded camera info from topic.')
+            except TimeoutError:
+                self.get_logger().warn('Timeout waiting for /camera/depth/camera_info, loading from YAML instead.')
+            self.depth_camera = DepthCamera()
+            self.depth_camera.loadCameraInfo(info_d=self.info_msg)
+            self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, 10)
+            self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, 10)
+            self.get_logger().info('Waiting for camera_info and depth frames...')
+            self.depth_img = None
+            self.color_img = None
+            self.range = [103,485,247,535] # test range [左上，右下]
 
-        cv2.namedWindow("Color Image")
-        cv2.setMouseCallback("Color Image", self.mouse_callback)
-        self.one_point_clicked = False
-        self.point_chosen = [(0,0),(0,0)]
+            cv2.namedWindow("Color Image")
+            cv2.setMouseCallback("Color Image", self.mouse_callback)
+            self.one_point_clicked = False
+            self.point_chosen = [(0,0),(0,0)]
 
-        self.timelist = [0] * 10
-        self.timeListHead = 0
-    '''
-    def info_init_callback(self, msg):
-        if self.cameraInfoInit:
-            return
-        self.model_d.fromCameraInfo(msg)
-        self.cameraInfoInit = True
-    '''
-    def wait_for_camera_info(self, timeout_sec=1.0):
-        #阻塞等待一次 /camera/depth/camera_info 消息
-        future = rclpy.task.Future()
-        def callback(msg):
+            self.timelist = [0] * 10
+            self.timeListHead = 0
+        '''
+        def info_init_callback(self, msg):
+            if self.cameraInfoInit:
+                return
+            self.model_d.fromCameraInfo(msg)
+            self.cameraInfoInit = True
+        '''
+        def wait_for_camera_info(self, timeout_sec=1.0):
+            #阻塞等待一次 /camera/depth/camera_info 消息
+            future = rclpy.task.Future()
+            def callback(msg):
+                if not future.done():
+                    future.set_result(msg)
+            self.create_subscription(CameraInfo, '/camera/depth/camera_info', callback, 10)
+            rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
             if not future.done():
-                future.set_result(msg)
-        self.create_subscription(CameraInfo, '/camera/depth/camera_info', callback, 10)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
-        if not future.done():
-            raise TimeoutError("CameraInfo timeout")
-        return future.result()
+                raise TimeoutError("CameraInfo timeout")
+            return future.result()
 
-    def timetest(self):
-        self.timelist[self.timeListHead] = time.time()
-        self.get_logger().info(f"time interval: {self.timelist[self.timeListHead]-self.timelist[(self.timeListHead-1)%10]:.3f} s")
-        self.get_logger().info(f"10 time average interval: {(self.timelist[self.timeListHead]-self.timelist[(self.timeListHead+1)%10])/10:.3f} s")
-        self.timeListHead = (self.timeListHead + 1) % 10
+        def timetest(self):
+            self.timelist[self.timeListHead] = time.time()
+            self.get_logger().info(f"time interval: {self.timelist[self.timeListHead]-self.timelist[(self.timeListHead-1)%10]:.3f} s")
+            self.get_logger().info(f"10 time average interval: {(self.timelist[self.timeListHead]-self.timelist[(self.timeListHead+1)%10])/10:.3f} s")
+            self.timeListHead = (self.timeListHead + 1) % 10
 
-    def color_callback(self, msg):
-        self.color_img = msg
-        #self.timetest()
+        def color_callback(self, msg):
+            self.color_img = msg
+            #self.timetest()
 
-    def depth_callback(self, msg):
-        if self.color_img is None:
-            return
-        #self.timetest()
-        self.depth_img = msg
-        cv2_color_img = self.depth_camera.bridge.imgmsg_to_cv2(self.color_img, desired_encoding='passthrough')
-        cv2_depth_img = self.depth_camera.bridge.imgmsg_to_cv2(self.depth_img, desired_encoding='passthrough').astype(np.uint16)
-        color_resized = cv2.resize(cv2_color_img, (cv2_depth_img.shape[1], cv2_depth_img.shape[0]), interpolation=cv2.INTER_LINEAR)
-        # 深度图叠加到彩色图，颜色表示深度
-        depth_colored = cv2.applyColorMap(cv2.convertScaleAbs(cv2_depth_img, alpha=0.03), cv2.COLORMAP_JET)
-        overlay = cv2.addWeighted(color_resized, 0.6, depth_colored, 0.4, 0)
-        color_resized = overlay
-        center = self.depth_camera.depthImageFindCenter(self.range, self.depth_img)
-        if center is not None:
-            u, v, depth, valid_points_count = center
-            #print(cv2_color_img.shape, color_resized.shape)
-            self.get_logger().info(f"Mass center at pixel ({u:.1f}, {v:.1f}) with depth {depth:.3f} m, valid points percent: {valid_points_count / ((self.range[2]-self.range[0])*(self.range[3]-self.range[1]))*100:.1f}%")
-            cv2.circle(color_resized, (int(u), int(v)), 5, (65535,65535,0), -1) # 黄色圆点
-            # 显示圆点坐标及深度
-            x,y,z = pix_to_cam(u, v, depth, self.depth_camera.model_d)
-            cv2.putText(color_resized, f"({x:.3f},{y:.3f},{z:.3f})", (int(u)+10, int(v)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (65535,65535,0), 1)
-        # 显示选定区域
-        cv2.rectangle(color_resized, (self.range[1], self.range[0]), (self.range[3], self.range[2]), (32768,32768,32768), 2)
-        cv2.imshow("Color Image", color_resized)
-        cv2.waitKey(1)
+        def depth_callback(self, msg):
+            if self.color_img is None:
+                return
+            #self.timetest()
+            self.depth_img = msg
+            cv2_color_img = self.depth_camera.bridge.imgmsg_to_cv2(self.color_img, desired_encoding='passthrough')
+            cv2_depth_img = self.depth_camera.bridge.imgmsg_to_cv2(self.depth_img, desired_encoding='passthrough').astype(np.uint16)
+            color_resized = cv2.resize(cv2_color_img, (cv2_depth_img.shape[1], cv2_depth_img.shape[0]), interpolation=cv2.INTER_LINEAR)
+            # 深度图叠加到彩色图，颜色表示深度
+            depth_colored = cv2.applyColorMap(cv2.convertScaleAbs(cv2_depth_img, alpha=0.03), cv2.COLORMAP_JET)
+            overlay = cv2.addWeighted(color_resized, 0.6, depth_colored, 0.4, 0)
+            color_resized = overlay
+            center = self.depth_camera.depthImageFindCenter(self.range, self.depth_img)
+            if center is not None:
+                u, v, depth, valid_points_count = center
+                #print(cv2_color_img.shape, color_resized.shape)
+                self.get_logger().info(f"Mass center at pixel ({u:.1f}, {v:.1f}) with depth {depth:.3f} m, valid points percent: {valid_points_count / ((self.range[2]-self.range[0])*(self.range[3]-self.range[1]))*100:.1f}%")
+                cv2.circle(color_resized, (int(u), int(v)), 5, (65535,65535,0), -1) # 黄色圆点
+                # 显示圆点坐标及深度
+                x,y,z = pix_to_cam(u, v, depth, self.depth_camera.model_d)
+                cv2.putText(color_resized, f"({x:.3f},{y:.3f},{z:.3f})", (int(u)+10, int(v)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (65535,65535,0), 1)
+            # 显示选定区域
+            cv2.rectangle(color_resized, (self.range[1], self.range[0]), (self.range[3], self.range[2]), (32768,32768,32768), 2)
+            cv2.imshow("Color Image", color_resized)
+            cv2.waitKey(1)
 
-    def mouse_callback(self, event, x, y, flags, param):
-        if event == cv2.EVENT_LBUTTONDOWN:
-            if not self.one_point_clicked:
-                self.point_chosen[0] = (x, y)
-                self.one_point_clicked = True
-                self.get_logger().info(f"First point chosen at ({x}, {y})")
-            else:
-                self.point_chosen[1] = (x, y)
-                self.one_point_clicked = False
-                x1 = min(self.point_chosen[0][0], self.point_chosen[1][0])
-                y1 = min(self.point_chosen[0][1], self.point_chosen[1][1])
-                x2 = max(self.point_chosen[0][0], self.point_chosen[1][0])
-                y2 = max(self.point_chosen[0][1], self.point_chosen[1][1])
-                self.range = [y1, x1, y2, x2]
-                self.get_logger().info(f"Second point chosen at ({x}, {y}), new range set to [{y1}, {x1}, {y2}, {x2}]")
+        def mouse_callback(self, event, x, y, flags, param):
+            if event == cv2.EVENT_LBUTTONDOWN:
+                if not self.one_point_clicked:
+                    self.point_chosen[0] = (x, y)
+                    self.one_point_clicked = True
+                    self.get_logger().info(f"First point chosen at ({x}, {y})")
+                else:
+                    self.point_chosen[1] = (x, y)
+                    self.one_point_clicked = False
+                    x1 = min(self.point_chosen[0][0], self.point_chosen[1][0])
+                    y1 = min(self.point_chosen[0][1], self.point_chosen[1][1])
+                    x2 = max(self.point_chosen[0][0], self.point_chosen[1][0])
+                    y2 = max(self.point_chosen[0][1], self.point_chosen[1][1])
+                    self.range = [y1, x1, y2, x2]
+                    self.get_logger().info(f"Second point chosen at ({x}, {y}), new range set to [{y1}, {x1}, {y2}, {x2}]")
 
 
 def main():

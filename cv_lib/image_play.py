@@ -41,8 +41,8 @@ class CameraToPixel(Node):
     def color_callback(self, msg):
         time_tmp = time.time()
         color_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8').astype(np.uint8)
-        async_print('.')
-        print(".")
+        # async_print('.')
+        # print(".")
         # self.count += 1
         # if self.time_s != int(time.time()):
         #     async_print(f'FPS: {self.count}')

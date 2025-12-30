@@ -20,6 +20,7 @@ devel/
 .vscode/start_program
 *.pyc
 basket_seg/labels.txt
+xangle.txt
 
 *.json
 *.jpg
@@ -28,4 +29,5 @@ basket_seg/labels.txt
 *.MP4
 *.svg
 
-runs/detect/
+runs/
+rosbag2*/
