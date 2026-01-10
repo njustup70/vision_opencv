@@ -102,7 +102,7 @@ def deformRestore(img, point, shape, camera_matrix = camera_matrix, dist_coeffs 
     camera_matrix = np.array(camera_matrix, dtype=np.float64).reshape(3, 3)
     points_3d = get3dPoints(point, shape)
     points_2d = trans3DToPlane(points_3d, camera_matrix, dist_coeffs, rvec=rvec, tvec=tvec)
-    return ROIRestore(img, points_2d, image_shape=image_shape)
+    return ROIRestore(img, points_2d, image_shape=image_shape), points_2d
 
 if __name__ == "__main__":
     # 测试代码

@@ -1,0 +1,5 @@
+attitude_angle:
+  depression_angle:
+    rows: 3
+    cols: 1
+    data: [0.004603,-0.884084,-0.467306]

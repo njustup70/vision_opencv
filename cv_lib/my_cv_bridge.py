@@ -39,14 +39,14 @@ class ImageSubscribe_t(Node):
     """
     订阅ROS 2图像话题并转为OpenCV图像
     """
-    def __init__(self, topic: str, node_name="image_subscriber"):
+    def __init__(self, topic: str, node_name="image_subscriber", qos_profile=None):
         super().__init__(node_name)
         self._topic = topic
         self._subscriber = self.create_subscription(
             Image,
             topic,
             self.image_callback,
-            10
+            qos_profile if qos_profile else 10
         )
         self._bridge = CvBridge()
         self.latest_image = None  # 存储最新的图像

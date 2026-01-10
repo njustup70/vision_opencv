@@ -2,16 +2,32 @@ from ultralytics import YOLO
 import deform_restore as rs
 import cv2
 import numpy as np
+import yaml
 
-def img_preprocess(img):
-    pass 
+def img_preprocess(img, depression_angle, target_loc, target_direct = 0, target_size = (500,500)): # 默认看正面
+    """
+    图像进入YOLO的预处理
+    
+    :param img: 原图像 :type:`np.ndarray`
+    :param depression_angle: 相机俯仰角 (nx, ny, nz) :type:`list`
+    :param target_loc: 目标3D位置 (x, y, z)
+    :param target_direct: 目标方向，默认看正面，看上面传1 :type:`int`
+    :param target_size: 目标大小，默认(500,500) :type:`tuple`
+    """
+    
+    up_normal = np.array(depression_angle).reshape(3, 1) # 水平面(上面)法向量
+    forward_normal = np.cross(up_normal.reshape(3,), np.array([1,0,0])).reshape(3,1) # 前方向法向量
+    if target_direct == 0: # 看正面
+        plane_normal = forward_normal
+    else: # 看上面
+        plane_normal = up_normal
+    roi_img, roi_2d = rs.deformRestore(img, target_loc, (target_size[0], target_size[1], plane_normal.reshape(3,)), image_shape=target_size)
+    return roi_img, roi_2d
 
-def get_yolo_result(model, img, roi_3d):
-    roi_2d = rs.trans3DToPlane(roi_3d)
-    roi_img = rs.ROIRestore(img, roi_2d, image_shape=[500,500])
+def get_yolo_result(model, img):
 
-    result = model.predict(source=roi_img, save=False, save_txt=False, conf=0.25, iou=0.45)
-    return result, roi_img, roi_2d
+    result = model.predict(source=img, save=False, save_txt=False, conf=0.25, iou=0.45)
+    return result
 
 if __name__ == "__main__":
     import rclpy
@@ -25,9 +41,10 @@ if __name__ == "__main__":
     import threading
     from rclpy.qos import qos_profile_sensor_data
 
-class CameraToPixel(Node):
+class RestoreYOLO(Node):
     def __init__(self):
-        super().__init__('camera_to_pixel')
+        print(" 1  ")
+        super().__init__('restore_YOLO_node')
         self.cameraInfoInit = False
         self.bridge = CvBridge()
         self.model = PinholeCameraModel()
@@ -36,6 +53,7 @@ class CameraToPixel(Node):
         self.timelist = [0] * 10
         self.timeListHead = 0
         
+        
         self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, qos_profile=qos_profile_sensor_data)
 
         self.get_logger().info('Waiting for color frames...')
@@ -43,16 +61,18 @@ class CameraToPixel(Node):
         self.count = 0
         self.yolo_model = YOLO("best.pt")
 
+        cv2.namedWindow("ROI Image", cv2.WINDOW_NORMAL)
+        cv2.namedWindow("Color Image", cv2.WINDOW_NORMAL)
+
+        with open('DepthCamera/attitude_info.yaml', 'r') as f:
+            data = yaml.safe_load(f)
+        self.depression_angle = data['attitude_angle']['depression_angle']['data']
+
 
     def color_callback(self, msg):
         color_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8').astype(np.uint8)
-        roi_3d = np.array([
-            [-0.5, -0.5, 0],
-            [0.5, -0.5, 0],
-            [0.5, 0.5, 0],    
-            [-0.5, 0.5, 0]
-        ], dtype=np.float32)
-        result, roi_img, roi_2d = get_yolo_result(self.yolo_model, color_img, roi_3d)
+        roi_img, roi_2d = img_preprocess(color_img, self.depression_angle, target_loc=(-200,-200,1000), target_direct=0, target_size=(500,500))
+        result = get_yolo_result(self.yolo_model, roi_img)
         # 绘制roi区域
         for i in range(4):
             pt1 = (int(roi_2d[i][0]), int(roi_2d[i][1]))
@@ -82,14 +102,15 @@ class CameraToPixel(Node):
             print("没有检测到目标")
             label = "No detection"
         cv2.putText(color_img, str(label), (int(roi_2d[0][0]), int(roi_2d[0][1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
-        cv2.namedWindow("Color Image", cv2.WINDOW_NORMAL)
+        
         cv2.imshow("Color Image", color_img)
+        cv2.imshow("ROI Image", roi_img)
         #async_print(f"Processing time: {time.time() - time_tmp}")
         cv2.waitKey(1)
 
 def main():
     rclpy.init()
-    node = CameraToPixel()
+    node = RestoreYOLO()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

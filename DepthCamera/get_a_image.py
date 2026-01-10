@@ -5,10 +5,11 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from my_cv_bridge import ImageSubscribe_t
+from rclpy.qos import qos_profile_sensor_data
 
 def get_a_image():
     rclpy.init()
-    image_subscriber = ImageSubscribe_t('/camera/color/image_raw', node_name="image_getter")
+    image_subscriber = ImageSubscribe_t('/camera/color/image_raw', node_name="image_getter", qos_profile=qos_profile_sensor_data)
 
     # Spin the node for a short time to ensure we receive an image
     rclpy.spin_once(image_subscriber, timeout_sec=2.0)

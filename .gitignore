@@ -20,7 +20,7 @@ devel/
 .vscode/start_program
 *.pyc
 basket_seg/labels.txt
-xangle.txt
+*.txt
 
 *.json
 *.jpg
