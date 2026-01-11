@@ -52,32 +52,59 @@ def pix_to_cam(u, v, depth, model):
     return X, Y, Z
 
 
-def average_normal(file_path):
+def average_normal(d2c_r=None):
     normal_array = np.array(normal_list)
     average = np.mean(normal_array, axis=0)
     average /= np.linalg.norm(average)  # 单位化
-    average_good = np.array([0.0, 1.0, 0.0])
-    cos_thresh = np.cos(np.deg2rad(0.5))
-    while average_good @ average < cos_thresh:
-        average = average_good
-        dots = normal_array @ average
-        k = int(0.7 * len(dots))               # 取最近 70%
-        idx = np.argsort(dots)[:k]
-        normal_array_good = normal_array[idx]   #先不删
-        average_good = np.mean(normal_array_good, axis=0)
-        average_good /= np.linalg.norm(average_good)
+    delta_angle = 0.5
+    flag = 1
+    while flag:
+        average_good = np.array([0.0, 1.0, 0.0])
+        cos_thresh = np.cos(np.deg2rad(delta_angle))
+        angle_error = 0
+        times = [0, 0]
+        while average_good @ average < cos_thresh:
+            average = average_good
+            dots = normal_array @ average
+            k = int(0.7 * len(dots))               # 取最近 70%
+            idx = np.argsort(dots)[:k]
+            normal_array_good = normal_array[idx]   #先不删
+            average_good = np.mean(normal_array_good, axis=0)
+            average_good /= np.linalg.norm(average_good)
+            times[0] += 1
+            if times[0] > 100:   # 防止死循环
+                angle_error = 1
+                delta_angle += 0.1
+                break
+        if angle_error:
+            continue
 
-    average_good = np.array([0.0, 1.0, 0.0])
-    while average_good @ average < cos_thresh:
-        average = average_good
-        dots = normal_array @ average
-        k = int(0.7 * len(dots))
-        idx = np.argsort(dots)[:k]
-        normal_array = normal_array[idx]   #删
-        average_good = np.mean(normal_array, axis=0)
-        average_good /= np.linalg.norm(average_good)
+        average_good = np.array([0.0, 1.0, 0.0])
+        while average_good @ average < cos_thresh:
+            average = average_good
+            dots = normal_array @ average
+            k = int(0.7 * len(dots))
+            idx = np.argsort(dots)[:k]
+            normal_array = normal_array[idx]   #删
+            if len(normal_array) < 5: # 可置信向量过少
+                break
+            average_good = np.mean(normal_array, axis=0)
+            average_good /= np.linalg.norm(average_good)
+            times[1] += 1
+            if times[1] > 100:  # 防止死循环(其实不会)
+                break
+        else: # 最小delta_angle,结束
+            flag = 0
 
-    print(f"Average normal vector: {average_good}")
+        delta_angle += 0.1 # 放宽条件，继续迭代,以防过小时无结果
+        if delta_angle > 10:
+            print("Failed to converge average normal vector within reasonable angle threshold.")
+            break
+
+    if d2c_r is not None:
+        average_good = np.array(d2c_r).reshape(3,3) @ average_good.reshape(3,1)
+        average_good = average_good.reshape(3,)
+    print(f"Average normal vector: {average_good[0]:.6f},{average_good[1]:.6f},{average_good[2]:.6f}")
     with open("DepthCamera/xangle.txt", "a") as f:
         f.write(f"Average normal vector: {average_good[0]:.6f},{average_good[1]:.6f},{average_good[2]:.6f}\n")
         f.write(f"Points used: {len(normal_array)}\n")
@@ -194,20 +221,21 @@ class GetCameraXAngle(Node):
             normal_list.append(seed_normal)
             with open("DepthCamera/xangle.txt", "a") as f:
                 f.write(f"{seed_normal[0]:.6f},{seed_normal[1]:.6f},{seed_normal[2]:.6f}\n")
-        average_normal("DepthCamera/xangle.txt")
+        average_normal(self.depth_camera.d2c_r)
         rclpy.shutdown()
         
 
 def mouse_callback(event, x, y, flags, param):
     if event == cv2.EVENT_LBUTTONDOWN:
         point = (x, y)
+        img = param.copy()
         print(f"point chosen at ({x}, {y})")
         points_list.append(point)
         for point in points_list:
-            cv2.circle(param, point, 5, (0, 0, 255), -1)
+            cv2.circle(img, point, 5, (0, 0, 255), -1)
         num = len(points_list)
-        cv2.putText(param, f"Point {num}", (10, param.shape[1]-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-        cv2.imshow("Retrieved Image", param)
+        cv2.putText(img, f"Point {num}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        cv2.imshow("Retrieved Image", img)
 
 def main():
     img = get_a_image()

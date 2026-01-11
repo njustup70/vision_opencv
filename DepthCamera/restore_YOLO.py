@@ -4,6 +4,9 @@ import cv2
 import numpy as np
 import yaml
 
+target_loc=(0,100,500)
+target_size=(400,400)
+
 def img_preprocess(img, depression_angle, target_loc, target_direct = 0, target_size = (500,500)): # 默认看正面
     """
     图像进入YOLO的预处理
@@ -71,15 +74,15 @@ class RestoreYOLO(Node):
 
     def color_callback(self, msg):
         color_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8').astype(np.uint8)
-        roi_img, roi_2d = img_preprocess(color_img, self.depression_angle, target_loc=(-200,-200,1000), target_direct=0, target_size=(500,500))
+        roi_img, roi_2d = img_preprocess(color_img, self.depression_angle, target_loc=target_loc, target_direct=0, target_size=target_size)
         result = get_yolo_result(self.yolo_model, roi_img)
         # 绘制roi区域
         for i in range(4):
             pt1 = (int(roi_2d[i][0]), int(roi_2d[i][1]))
             pt2 = (int(roi_2d[(i+1)%4][0]), int(roi_2d[(i+1)%4][1]))
             cv2.line(color_img, pt1, pt2, (0, 255, 0), 2)
-        scale_x = (roi_2d[1][0] - roi_2d[0][0]) / 500
-        scale_y = (roi_2d[3][1] - roi_2d[0][1]) / 500
+        scale_x = (roi_2d[1][0] - roi_2d[0][0]) / target_size[0]
+        scale_y = (roi_2d[3][1] - roi_2d[0][1]) / target_size[1]
         if len(result[0].boxes) > 0:
             cls1 = result[0].boxes.cls[0]  # 第一个检测框的类别
             conf1 = result[0].boxes.conf[0]  # 第一个检测框的置信度
@@ -98,6 +101,7 @@ class RestoreYOLO(Node):
 
             x1, y1, x2, y2 = map(int, (x1, y1, x2, y2))
             cv2.rectangle(color_img, (x1, y1), (x2, y2), (255, 0, 0), 2)
+            cv2.rectangle(roi_img, (xyxy[0], xyxy[1]), (xyxy[2], xyxy[3]), (255, 0, 0), 2)
         else:
             print("没有检测到目标")
             label = "No detection"
