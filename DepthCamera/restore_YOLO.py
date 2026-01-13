@@ -22,17 +22,19 @@ def img_preprocess(img, depression_angle, target_loc, target_direct = 0, target_
     forward_normal = np.cross(up_normal, np.array([1,0,0])) # 前方向法向量
     if target_direct == 0: # 看正面
         plane_normal = forward_normal
+        up_direct = up_normal
     else: # 看上面
-        plane_normal = up_normal
+        plane_normal = -up_normal
+        up_direct = forward_normal
 
     # 计算平面旋转rot矩阵
     
-    roi_img, roi_2d = rs.deformRestore(img, target_loc,(target_size[0], target_size[1], plane_normal.reshape(3,)), up_direct=up_normal, image_shape=target_size)
+    roi_img, roi_2d = rs.deformRestore(img, target_loc,(target_size[0], target_size[1], plane_normal.reshape(3,)), up_direct=up_direct, image_shape=target_size)
     return roi_img, roi_2d
 
 def get_yolo_result(model, img):
 
-    result = model.predict(source=img, save=False, save_txt=False, conf=0.25, iou=0.45)
+    result = model.predict(source=img, save=False, save_txt=False, conf=0.005, iou=0.45)
     return result
 
 if __name__ == "__main__":
@@ -49,7 +51,7 @@ if __name__ == "__main__":
 
 class RestoreYOLO(Node):
     def __init__(self):
-        print(" 1  ")
+        #print(" 1  ")
         super().__init__('restore_YOLO_node')
         self.cameraInfoInit = False
         self.bridge = CvBridge()
@@ -68,7 +70,9 @@ class RestoreYOLO(Node):
         self.yolo_model = YOLO("best.pt")
 
         cv2.namedWindow("ROI Image", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("ROI Image", 800, 800)
         cv2.namedWindow("Color Image", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Color Image", 800, 800)
         cv2.moveWindow("ROI Image", 0, 0)
         cv2.moveWindow("Color Image", 800, 0)
 
@@ -80,6 +84,8 @@ class RestoreYOLO(Node):
     def color_callback(self, msg):
         color_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8').astype(np.uint8)
         roi_img, roi_2d = img_preprocess(color_img, self.depression_angle, target_loc=target_loc, target_direct=0, target_size=target_size)
+        #roi_img = color_img
+        #roi_2d = np.array([[100,100],[600,100],[600,600],[100,600]])
         result = get_yolo_result(self.yolo_model, roi_img)
         # 绘制roi区域
         for i in range(4):
