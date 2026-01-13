@@ -1,7 +1,9 @@
 # 相机俯角标定
+# 数据点平均有异常去from_file.py改各个阈值再跑一遍
+# 跑完了把结果复制进attitude_info.yaml里
 import numpy as np
 from image_geometry import PinholeCameraModel
-from get_cam_xangle import fit_plane_from_depth
+from get_cam_xangle_point import fit_plane_from_depth
 from plan_PC_fit import timetest
 import rclpy
 from rclpy.node import Node
@@ -53,21 +55,24 @@ def pix_to_cam(u, v, depth, model):
 
 
 def average_normal(d2c_r=None):
+    all_points = len(normal_list)
     normal_array = np.array(normal_list)
+    normal_array_original = normal_array.copy()
     average = np.mean(normal_array, axis=0)
     average /= np.linalg.norm(average)  # 单位化
     delta_angle = 0.5
     flag = 1
     while flag:
-        average_good = np.array([0.0, 1.0, 0.0])
+        normal_array = normal_array_original.copy()
+        average_good = average.copy()
         cos_thresh = np.cos(np.deg2rad(delta_angle))
         angle_error = 0
         times = [0, 0]
-        while average_good @ average < cos_thresh:
-            average = average_good
+        while average_good @ average < cos_thresh or times[0] == 0:
+            average = average_good.copy()
             dots = normal_array @ average
             k = int(0.7 * len(dots))               # 取最近 70%
-            idx = np.argsort(dots)[:k]
+            idx = np.argsort(dots)[-k:]
             normal_array_good = normal_array[idx]   #先不删
             average_good = np.mean(normal_array_good, axis=0)
             average_good /= np.linalg.norm(average_good)
@@ -79,32 +84,41 @@ def average_normal(d2c_r=None):
         if angle_error:
             continue
 
-        average_good = np.array([0.0, 1.0, 0.0])
-        while average_good @ average < cos_thresh:
-            average = average_good
+        average = average_good.copy()
+        # 先删一次
+        dots = normal_array @ average
+        k = int(0.7 * len(dots))
+        idx = np.argsort(dots)[-k:]
+        normal_array = normal_array[idx]
+        while average_good @ average < cos_thresh or times[1] == 0:
+            average = average_good.copy()
             dots = normal_array @ average
             k = int(0.7 * len(dots))
-            idx = np.argsort(dots)[:k]
-            normal_array = normal_array[idx]   #删
-            if len(normal_array) < 5: # 可置信向量过少
+            idx = np.argsort(dots)[-k:]
+            normal_array = normal_array[idx] # 删
+            if len(normal_array) < 20:      # 特征点过少时记得改阈值！！！
                 break
             average_good = np.mean(normal_array, axis=0)
             average_good /= np.linalg.norm(average_good)
             times[1] += 1
-            if times[1] > 100:  # 防止死循环(其实不会)
+            if times[1] > 100:  # 防止死循环
                 break
-        else: # 最小delta_angle,结束
+        else:
             flag = 0
+            break
 
         delta_angle += 0.1 # 放宽条件，继续迭代,以防过小时无结果
-        if delta_angle > 10:
+        if delta_angle > 5:
             print("Failed to converge average normal vector within reasonable angle threshold.")
-            break
+            average = None
+            average_good = None
+            raise RuntimeError("Failed to converge average normal vector within reasonable angle threshold.")
 
     if d2c_r is not None:
         average_good = np.array(d2c_r).reshape(3,3) @ average_good.reshape(3,1)
         average_good = average_good.reshape(3,)
-    print(f"Average normal vector: {average_good[0]:.6f},{average_good[1]:.6f},{average_good[2]:.6f}")
+    print(f"Average normal vector: {average_good[0]:.6f},{average_good[1]:.6f},{average_good[2]:.6f}\nPoints used: {len(normal_array)} in all points {all_points}\n")
+    print(f"Iterations without deletion: {times[0]}, with deletion: {times[1]}, delta_angle: {delta_angle}")
     with open("DepthCamera/xangle.txt", "a") as f:
         f.write(f"Average normal vector: {average_good[0]:.6f},{average_good[1]:.6f},{average_good[2]:.6f}\n")
         f.write(f"Points used: {len(normal_array)}\n")
@@ -221,7 +235,10 @@ class GetCameraXAngle(Node):
             normal_list.append(seed_normal)
             with open("DepthCamera/xangle.txt", "a") as f:
                 f.write(f"{seed_normal[0]:.6f},{seed_normal[1]:.6f},{seed_normal[2]:.6f}\n")
-        average_normal(self.depth_camera.d2c_r)
+        try:
+            average_normal(self.depth_camera.d2c_r)
+        except RuntimeError as e:
+            self.get_logger().error(str(e))
         rclpy.shutdown()
         
 

@@ -10,13 +10,14 @@ dist_coeffs = np.array([
     [-0.03157561272382736, 0.03607562929391861, 0.0001983262482099235, -0.000041368522943230346, -0.012517155148088932, 0, 0, 0]
 ], dtype=np.float32)
 
-def get3dPoints(center, shape):
+def get3dPoints(center, shape, up_direct=None):
     '''
     计算平面四个顶点相机坐标系下的3D坐标
     
-    :param center:  平面中心点的3D相对坐标 (x, y, z)
-    :param shape:   平面的宽高和法向量 (width, height, (nx, ny, nz))
-    :return: 4个顶点的3D坐标，按顺时针顺序排列 :type:`np.ndarray` (4x3)
+    :param center:          平面中心点的3D相对坐标 (x, y, z)
+    :param shape:           平面的宽高和法向量 (width, height, (nx, ny, nz))
+    :param up_direct:       平面纵向向量，即y轴正方形 (可选)
+    :return:                4个顶点的3D坐标，按顺时针顺序排列 :type:`np.ndarray` (4x3)
     '''
     w, h, n = shape
     # 平面自身局部坐标（以中心为原点）
@@ -33,10 +34,13 @@ def get3dPoints(center, shape):
     n = np.array([nx, ny, nz], dtype=np.float32)
     n /= np.linalg.norm(n)
 
-    # 随便找一个与 n 不平行的向量，求叉积得到平面局部坐标轴
-    up = np.array([0, 1, 0], dtype=np.float32)
-    if abs(np.dot(up, n)) > 0.9:
-        up = np.array([1, 0, 0], dtype=np.float32)
+    if up_direct is None:
+        # 随便找一个与 n 不平行的向量，求叉积得到平面局部坐标轴
+        up = np.array([0, 1, 0], dtype=np.float32)
+        if abs(np.dot(up, n)) > 0.9:
+            up = np.array([1, 0, 0], dtype=np.float32)
+    else:
+        up = -up_direct  # 取纵向向量作为up
 
     x_axis = np.cross(up, n)
     x_axis /= np.linalg.norm(x_axis)
@@ -85,13 +89,14 @@ def ROIRestore(img, points_2d, image_shape = [500,500]):
     warped = cv2.warpPerspective(img, Hmat, (w_out, h_out))
     return warped
 
-def deformRestore(img, point, shape, camera_matrix = camera_matrix, dist_coeffs = dist_coeffs, rvec=None, tvec=None, image_shape = [500,500]):
+def deformRestore(img, point, shape, up_direct=None, camera_matrix = camera_matrix, dist_coeffs = dist_coeffs, rvec=None, tvec=None, image_shape = [500,500]):
     ''' 
     根据3D点和相机参数还原图像
 
     :param img:             输入图像 :cpp:type:`sensor_msgs::Image`
     :param point:           平面中心点的3D相对坐标 (x, y, z)
     :param shape:           平面的宽高和法向量 (width, height, (nx, ny, nz))
+    :param up_direct:       平面纵向向量，即y轴正方形 (可选)
     :param camera_matrix:   相机内参矩阵
     :param dist_coeffs:     相机畸变系数
     :param rvec:            旋转向量 (外参可选)
@@ -100,7 +105,7 @@ def deformRestore(img, point, shape, camera_matrix = camera_matrix, dist_coeffs 
     :return: 还原展开后图像
     '''
     camera_matrix = np.array(camera_matrix, dtype=np.float64).reshape(3, 3)
-    points_3d = get3dPoints(point, shape)
+    points_3d = get3dPoints(point, shape, up_direct=up_direct)
     points_2d = trans3DToPlane(points_3d, camera_matrix, dist_coeffs, rvec=rvec, tvec=tvec)
     return ROIRestore(img, points_2d, image_shape=image_shape), points_2d
 
@@ -110,7 +115,7 @@ if __name__ == "__main__":
     img = cv2.resize(img, (1280, 800))
     center = (0.457, 0.017, 0.6)  # 平面中心点的3D坐标
     shape = (0.35, 0.35, (0, 0, 1))  # 平面的宽高和法向量
-    restored_img = deformRestore(img, center, shape)
+    restored_img = deformRestore(img, center, shape, up_direct=None)
     cv2.imshow("Restored Image", restored_img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

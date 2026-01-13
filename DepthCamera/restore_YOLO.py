@@ -5,7 +5,7 @@ import numpy as np
 import yaml
 
 target_loc=(0,100,500)
-target_size=(400,400)
+target_size=(500,500) # ROI大小,调大一点，不知道为什么YOLO只能识别占比小一点的
 
 def img_preprocess(img, depression_angle, target_loc, target_direct = 0, target_size = (500,500)): # 默认看正面
     """
@@ -18,13 +18,16 @@ def img_preprocess(img, depression_angle, target_loc, target_direct = 0, target_
     :param target_size: 目标大小，默认(500,500) :type:`tuple`
     """
     
-    up_normal = np.array(depression_angle).reshape(3, 1) # 水平面(上面)法向量
-    forward_normal = np.cross(up_normal.reshape(3,), np.array([1,0,0])).reshape(3,1) # 前方向法向量
+    up_normal = np.array(depression_angle).reshape(3,) # 水平面(上面)法向量
+    forward_normal = np.cross(up_normal, np.array([1,0,0])) # 前方向法向量
     if target_direct == 0: # 看正面
         plane_normal = forward_normal
     else: # 看上面
         plane_normal = up_normal
-    roi_img, roi_2d = rs.deformRestore(img, target_loc, (target_size[0], target_size[1], plane_normal.reshape(3,)), image_shape=target_size)
+
+    # 计算平面旋转rot矩阵
+    
+    roi_img, roi_2d = rs.deformRestore(img, target_loc,(target_size[0], target_size[1], plane_normal.reshape(3,)), up_direct=up_normal, image_shape=target_size)
     return roi_img, roi_2d
 
 def get_yolo_result(model, img):
@@ -66,6 +69,8 @@ class RestoreYOLO(Node):
 
         cv2.namedWindow("ROI Image", cv2.WINDOW_NORMAL)
         cv2.namedWindow("Color Image", cv2.WINDOW_NORMAL)
+        cv2.moveWindow("ROI Image", 0, 0)
+        cv2.moveWindow("Color Image", 800, 0)
 
         with open('DepthCamera/attitude_info.yaml', 'r') as f:
             data = yaml.safe_load(f)
@@ -81,8 +86,6 @@ class RestoreYOLO(Node):
             pt1 = (int(roi_2d[i][0]), int(roi_2d[i][1]))
             pt2 = (int(roi_2d[(i+1)%4][0]), int(roi_2d[(i+1)%4][1]))
             cv2.line(color_img, pt1, pt2, (0, 255, 0), 2)
-        scale_x = (roi_2d[1][0] - roi_2d[0][0]) / target_size[0]
-        scale_y = (roi_2d[3][1] - roi_2d[0][1]) / target_size[1]
         if len(result[0].boxes) > 0:
             cls1 = result[0].boxes.cls[0]  # 第一个检测框的类别
             conf1 = result[0].boxes.conf[0]  # 第一个检测框的置信度
@@ -93,14 +96,6 @@ class RestoreYOLO(Node):
                 label2 = f"{self.yolo_model.names[int(cls2)]}: {conf2:.2f}"
                 label = label + " | " + label2
             xyxy = result[0].boxes.xyxy[0].cpu().numpy().astype(int)
-            x1, y1, x2, y2 = xyxy
-            x1 = x1 * scale_x + roi_2d[0][0]
-            x2 = x2 * scale_x + roi_2d[0][0]
-            y1 = y1 * scale_y + roi_2d[0][1]
-            y2 = y2 * scale_y + roi_2d[0][1]
-
-            x1, y1, x2, y2 = map(int, (x1, y1, x2, y2))
-            cv2.rectangle(color_img, (x1, y1), (x2, y2), (255, 0, 0), 2)
             cv2.rectangle(roi_img, (xyxy[0], xyxy[1]), (xyxy[2], xyxy[3]), (255, 0, 0), 2)
         else:
             print("没有检测到目标")
