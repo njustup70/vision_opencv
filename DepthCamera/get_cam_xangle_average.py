@@ -3,16 +3,14 @@
 # 跑完了把结果复制进attitude_info.yaml里
 import numpy as np
 from get_cam_xangle_point import fit_plane_from_depth
-from plan_PC_fit import timetest
 import rclpy
-from rclpy.node import Node
 import time
 import cv2
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import Image
 import threading
 from rclpy.qos import qos_profile_sensor_data
 from get_a_image import get_a_image
-from DepthCamera import DepthCamera, pix_to_cam, DepthCamNode
+from DepthCamera import pix_to_cam, DepthCamNode
 
 points_list = []
 normal_list = []
