@@ -18,11 +18,6 @@
 ### PlaneDepToSpace.py
 - 功能：识别 ROI 内主体深度峰值并计算质心像素与相机坐标
 - 注意：深度图与彩色图叠加时需对齐尺寸（如 1280x720 -> 848x480）
-- 交互：可点击画面框选 ROI
-
-### SpaceToPlaneDep.py
-- 点云投影到深度图并做误差对比的测试脚本
-- 由于点云话题弃用，脚本当前不作为主流程
 
 ### plan_PC_fit.py
 - 局部平面拟合与区域生长：`region_growing_plane`、`fit_plane_from_depth`
@@ -30,7 +25,6 @@
 
 ### get_cam_xangle_point.py
 - 单点平面法向量测量（相机俯角）
-- 鼠标点选像素，输出法向量并写入 `DepthCamera/xangle.txt`
 
 ### get_cam_xangle_average.py
 - 多点采样后求平均法向量（含异常点剔除逻辑）
@@ -48,14 +42,15 @@
 
 ### restore_YOLO.py
 - 基于变形恢复的 ROI 预处理 + YOLO 目标检测
-- 使用 `best.pt` 权重，结果在 ROI 与原图上同时显示
 
 ### check_spearhead.py
 - 矛头检测：将点云划分为 6 个子区域并统计点数
-- 提供实时投影可视化与计数显示
 
 ## 配置文件
 - `color_camera_info.yaml`：彩色相机内参
 - `depth_camera_info.yaml`：深度相机内参
 - `depth_to_color_info.yaml`：深度到彩色外参
 - `attitude_info.yaml`：相机姿态/俯角配置
+
+## 另
+ - 所有的测试代码已删，直接跑需要切分支

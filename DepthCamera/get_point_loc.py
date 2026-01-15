@@ -1,5 +1,5 @@
 # 对deform_restore的测试文件
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import Image
 import numpy as np
 import deform_restore
 
