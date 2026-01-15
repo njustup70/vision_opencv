@@ -1,8 +1,6 @@
-# 相机俯角标定
+# 相机俯角测量
+# 只包含单点的平面法向量测量
 import numpy as np
-import open3d as o3d
-from image_geometry import PinholeCameraModel
-import sensor_msgs_py.point_cloud2 as pc2
 from plan_PC_fit import region_growing_plane, depth_to_point_cloud, timetest
 
 def fit_plane_from_depth(depth_img, camera_model, u, v, depth_scale=1.0, points = None):
@@ -37,89 +35,16 @@ def fit_plane_from_depth(depth_img, camera_model, u, v, depth_scale=1.0, points 
 
 if __name__ == '__main__':
     import rclpy
-    from rclpy.node import Node
     import time
     import cv2
-    from sensor_msgs.msg import Image, CameraInfo, PointCloud2
-    from cv_bridge import CvBridge
-    import yaml
+    from sensor_msgs.msg import Image
     import threading
     from rclpy.qos import qos_profile_sensor_data
+    from DepthCamera import DepthCamera, pix_to_cam, DepthCamNode
 
-    def load_camera_info(yaml_path: str) -> CameraInfo:
-        with open(yaml_path, 'r') as f:
-            data = yaml.safe_load(f)
-        msg = CameraInfo()
-        msg.width  = data['image_width']
-        msg.height = data['image_height']
-        msg.distortion_model = data['distortion_model']
-        msg.header.frame_id = data.get('header', {}).get('frame_id', '')
-        def to_float_list(x):
-            if isinstance(x, str):
-                x = x.strip('[]').replace(',', ' ').split()
-            return [float(i) for i in x]
-        msg.d = to_float_list(data['distortion_coefficients']['data'])
-        msg.k = to_float_list(data['camera_matrix']['data'])
-        msg.r = to_float_list(data['rectification_matrix']['data'])
-        msg.p = to_float_list(data['projection_matrix']['data'])
-        msg.binning_x = data.get('binning_x', 0)
-        msg.binning_y = data.get('binning_y', 0)
-        roi = data.get('roi', {})
-        msg.roi.x_offset = roi.get('x_offset', 0)
-        msg.roi.y_offset = roi.get('y_offset', 0)
-        msg.roi.height = roi.get('height', 0)
-        msg.roi.width = roi.get('width', 0)
-        msg.roi.do_rectify = roi.get('do_rectify', False)
-        return msg
-
-    def pix_to_cam(u, v, depth, model):
-        ray = model.projectPixelTo3dRay((u, v))
-        muit = 1.0 / ray[2]
-        X = ray[0] * muit * depth
-        Y = ray[1] * muit * depth
-        Z = ray[2] * muit * depth # Z = depth
-        return X, Y, Z
-
-    class DepthCamera:
+    class GetCameraXAngle(DepthCamNode):
         def __init__(self):
-            self.bridge = CvBridge()
-            self.model_d = PinholeCameraModel()
-            self.model_c = PinholeCameraModel()
-
-        def loadCameraInfo(self, info_d = None, info_c = None, info_d2c = None):
-            if info_d is None:
-                self.model_d.fromCameraInfo(load_camera_info('DepthCamera/depth_camera_info.yaml'))
-            else:
-                self.model_d.fromCameraInfo(info_d)
-
-            if info_c is None:
-                self.model_c.fromCameraInfo(load_camera_info('DepthCamera/color_camera_info.yaml'))
-            else:
-                self.model_c.fromCameraInfo(info_c)
-
-            if info_d2c is None:
-                with open('DepthCamera/depth_to_color_info.yaml', 'r') as f:
-                    data = yaml.safe_load(f)
-                rot = data['depth_to_color_extrinsics']['rotation']['data']
-                trans = data['depth_to_color_extrinsics']['translation']['data']
-            else:
-                rot = info_d2c['rotation']
-                trans = info_d2c['translation']
-            self.d2c_r = np.array(rot).reshape(3, 3)
-            self.d2c_t = np.array(trans).reshape(3, 1)
-
-    class GetCameraXAngle(Node):
-        def __init__(self):
-            super().__init__('pixel_to_camera')
-            self.info_msg = None
-            self.get_logger().info('Waiting for /camera/depth/camera_info...')
-            try:
-                self.info_msg = self.wait_for_camera_info()
-                self.get_logger().info('Loaded camera info from topic.')
-            except TimeoutError:
-                self.get_logger().warn('Timeout waiting for /camera/depth/camera_info, loading from YAML instead.')
-            self.depth_camera = DepthCamera()
-            self.depth_camera.loadCameraInfo(info_d=self.info_msg)
+            super().__init__('get_X_angle_node')
             self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, qos_profile=qos_profile_sensor_data)
             self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, qos_profile=qos_profile_sensor_data)
             self.get_logger().info('Waiting for camera_info and depth frames...')
@@ -132,19 +57,6 @@ if __name__ == '__main__':
             cv2.namedWindow("Color Image", cv2.WINDOW_NORMAL)
             cv2.setMouseCallback("Color Image", self.mouse_callback)
             threading.Thread(target=self.working_process, daemon=True).start()
-
-
-        def wait_for_camera_info(self, timeout_sec=1.0):
-            #阻塞等待一次 /camera/depth/camera_info 消息
-            future = rclpy.task.Future()
-            def callback(msg):
-                if not future.done():
-                    future.set_result(msg)
-            self.create_subscription(CameraInfo, '/camera/depth/camera_info', callback, 10)
-            rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
-            if not future.done():
-                raise TimeoutError("CameraInfo timeout")
-            return future.result()
 
         def color_callback(self, msg):
             self.color_img = msg
@@ -199,20 +111,16 @@ if __name__ == '__main__':
                     f.write(f"{seed_normal[0]:.6f},{seed_normal[1]:.6f},{seed_normal[2]:.6f}\n")
                 px, py, pz = seed_normal + np.array([x, y, z])
                 edu, edv = self.depth_camera.model_d.project3dToPixel((px, py, pz))
-                pu = edu - u
-                pv = edv - v
                 cv2.circle(color_resized, (int(u), int(v)), 5, (65535,0,65535), -1) # 红色圆点表示种子点
                 cv2.putText(color_resized, f"Normal: ({seed_normal[0]:.3f},{seed_normal[1]:.3f},{seed_normal[2]:.3f})", (int(u)+10,int(v)-20), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (65535,0,65535), 2)
-                # 画出法向量方向
-                end_x = int(u + pu)
-                end_y = int(v + pv)
+                # 画出坐标轴及法向量方向
                 x_axis_3d = np.array([x+1.0,y,z])
                 y_axis_3d = np.array([x,y+1.0,z])
                 z_axis_3d = np.array([x,y,z+1.0])
                 x_axis_2d = self.depth_camera.model_d.project3dToPixel(x_axis_3d)
                 y_axis_2d = self.depth_camera.model_d.project3dToPixel(y_axis_3d)
                 z_axis_2d = self.depth_camera.model_d.project3dToPixel(z_axis_3d)
-                cv2.arrowedLine(color_resized, (int(u), int(v)), (end_x, end_y), (0,65535,65535), 2, tipLength=0.2)
+                cv2.arrowedLine(color_resized, (int(u), int(v)), (int(edu), int(edv)), (0,65535,65535), 2, tipLength=0.2)
                 cv2.arrowedLine(color_resized, (int(u), int(v)), (int(x_axis_2d[0]), int(x_axis_2d[1])), (0,65535,65535), 2, tipLength=0.2)
                 cv2.arrowedLine(color_resized, (int(u), int(v)), (int(y_axis_2d[0]), int(y_axis_2d[1])), (0,65535,65535), 2, tipLength=0.2)
                 cv2.arrowedLine(color_resized, (int(u), int(v)), (int(z_axis_2d[0]), int(z_axis_2d[1])), (0,65535,65535), 2, tipLength=0.2)

@@ -1,60 +1,45 @@
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
+from rclpy.qos import qos_profile_sensor_data
 import numpy as np
-from image_geometry import PinholeCameraModel
 import cv2
 import time
-import threading
-def async_print(msg):
-    threading.Thread(target=print, args=(msg,)).start()
 
+def get_FPS(timelist, timeListHead):
+    time_now = time.time()
+    timelist[timeListHead] = time_now
+    timeListHead = (timeListHead + 1) % len(timelist)
+    time_diff = time_now - timelist[timeListHead]
+    if time_diff == 0:
+        fps = 0.0
+    else:
+        fps = len(timelist) / time_diff
+    return fps, timelist, timeListHead
 
-class CameraToPixel(Node):
+class ImagePlay(Node):
     def __init__(self):
-        super().__init__('camera_to_pixel')
+        super().__init__('image_play_node')
         self.cameraInfoInit = False
         self.bridge = CvBridge()
-        self.model = PinholeCameraModel()
-        self.PointToDepth = None
-        self.depth_data = None
+        cv2.namedWindow("Color Image", cv2.WINDOW_NORMAL)
+        self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, qos_profile=qos_profile_sensor_data)
+
         self.timelist = [0] * 10
         self.timeListHead = 0
-        self.create_subscription(CameraInfo, '/camera/color/camera_info', self.info_init_callback, 10)
-
-        self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, 10)
-
         self.get_logger().info('Waiting for point frames...')
-        self.time_s = 0
-        self.count = 0
-
-    def info_init_callback(self, msg):
-        if self.cameraInfoInit:
-            return
-        self.model.fromCameraInfo(msg)
-        self.cameraInfoInit = True
-        self.width = msg.width
-        self.height = msg.height
-        self.color_map = np.full((self.height, self.width, 3), np.nan, dtype=np.uint8)
 
     def color_callback(self, msg):
-        time_tmp = time.time()
         color_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8').astype(np.uint8)
-        # async_print('.')
-        # print(".")
-        # self.count += 1
-        # if self.time_s != int(time.time()):
-        #     async_print(f'FPS: {self.count}')
-        #     self.count = 0
-        #     self.time_s = int(time.time())
+        fps, self.timelist, self.timeListHead = get_FPS(self.timelist, self.timeListHead)
+        cv2.putText(color_img, f'FPS: {fps:.2f}', (color_img.shape[1] - 100, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
         cv2.imshow("Color Image", color_img)
-        #async_print(f"Processing time: {time.time() - time_tmp}")
         cv2.waitKey(1)
 
 def main():
     rclpy.init()
-    node = CameraToPixel()
+    node = ImagePlay()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

@@ -1,3 +1,5 @@
+# YOLO目标检测模块
+# 基于变形恢复图像预处理, 将恢复后图像输入YOLO进行目标检测
 from ultralytics import YOLO
 import deform_restore as rs
 import cv2
@@ -51,7 +53,6 @@ if __name__ == "__main__":
 
 class RestoreYOLO(Node):
     def __init__(self):
-        #print(" 1  ")
         super().__init__('restore_YOLO_node')
         self.cameraInfoInit = False
         self.bridge = CvBridge()

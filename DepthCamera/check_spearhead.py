@@ -1,12 +1,11 @@
-import yaml
+# 矛头检测模块
 import numpy as np
-from sensor_msgs.msg import CameraInfo, Image, PointCloud2
-from cv_bridge import CvBridge
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from sensor_msgs.msg import Image
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, qos_profile_sensor_data
 
 qos = QoSProfile(
     depth=1,  # 只保留最新一帧
-    reliability=QoSReliabilityPolicy.RELIABLE,  # 尽量保证丢帧而不阻塞
+    reliability=QoSReliabilityPolicy.BEST_EFFORT,  # 尽量保证丢帧而不阻塞
     history=QoSHistoryPolicy.KEEP_LAST          # 只保存最后 depth 帧
 )
 
@@ -23,13 +22,14 @@ def check_spearhead(pc, model, T_box_cam, R_box_cam):
     '''
     检查点云中每个子区域的点数是否满足要求
 
-    :param pc: 点云数据 :type:`sensor_msgs.msg.PointCloud2`
+    :param pc: 点云数据 :type:`np.ndarray` (Nx3)
     :param model: 相机模型 :type:`DepthCamera`
     :param T_box_cam: 立方体中心在相机坐标系的位置 :type:`np.ndarray` (右， 下， 前)
-    :param R_box_cam: 立方体相对于相机的旋转矩阵 :type:`np.ndarray` (俯角， 右转角)
+    :param R_box_cam: 立方体相对于相机的旋转矩阵 :type:`np.ndarray` (俯角， 右转角) rot_y(Theta1) @ rot_x(-Theta2)
     :return: 每个子区域是否满足点数要求的布尔列表 :type:`List[bool]`
     '''
-    depth_pc = pc2.read_points_numpy(pc, field_names=("x","y","z"))
+    #depth_pc = pc2.read_points_numpy(pc, field_names=("x","y","z"))
+    depth_pc = pc
     counts, _ = filter_rotated_subboxes(depth_pc, T_box_cam, R_box_cam, model)
     counts_check = [c >= 50 for c in counts]  # 每个子区域至少50个点
     return counts_check
@@ -80,19 +80,6 @@ def filter_rotated_subboxes(pc_dep, T_box_cam, R_box_cam, model):
         results.append(pc_color[mask])
     return counts, results
 
-
-# def project_points(Pc, K):
-#     """
-#     投影3D点到像素平面
-#     Pc: Nx3 相机坐标点，K: 3x3 内参
-#     """
-#     x = Pc[:,0]
-#     y = Pc[:,1]
-#     z = Pc[:,2]
-#     u = K[0,0]*x/z + K[0,2]
-#     v = K[1,1]*y/z + K[1,2]
-#     return np.stack([u,v], axis=1)
-
 def project_subboxes(model, T_box_cam, R_box_cam):
     """
     生成每个子框在像素上的8点投影
@@ -125,66 +112,9 @@ if __name__ == '__main__':
     from rclpy.node import Node
     import time
     import cv2
-    from image_geometry import PinholeCameraModel
+    from DepthCamera import DepthCamera, DepthCamNode
     import sensor_msgs_py.point_cloud2 as pc2
     import threading
-
-
-    def load_camera_info(yaml_path: str) -> CameraInfo:
-        with open(yaml_path, 'r') as f:
-            data = yaml.safe_load(f)
-        msg = CameraInfo()
-        msg.width  = data['image_width']
-        msg.height = data['image_height']
-        msg.distortion_model = data['distortion_model']
-        msg.header.frame_id = data.get('header', {}).get('frame_id', '')
-        def to_float_list(x):
-            if isinstance(x, str):
-                x = x.strip('[]').replace(',', ' ').split()
-            return [float(i) for i in x]
-        msg.d = to_float_list(data['distortion_coefficients']['data'])
-        msg.k = to_float_list(data['camera_matrix']['data'])
-        msg.r = to_float_list(data['rectification_matrix']['data'])
-        msg.p = to_float_list(data['projection_matrix']['data'])
-        msg.binning_x = data.get('binning_x', 0)
-        msg.binning_y = data.get('binning_y', 0)
-        roi = data.get('roi', {})
-        msg.roi.x_offset = roi.get('x_offset', 0)
-        msg.roi.y_offset = roi.get('y_offset', 0)
-        msg.roi.height = roi.get('height', 0)
-        msg.roi.width = roi.get('width', 0)
-        msg.roi.do_rectify = roi.get('do_rectify', False)
-        return msg
-
-
-    class DepthCamera:
-        def __init__(self):
-            self.bridge = CvBridge()
-            self.model_d = PinholeCameraModel()
-            self.model_c = PinholeCameraModel()
-
-        def loadCameraInfo(self, info_c = None, info_d = None, info_d2c = None):
-
-            if info_c is None:
-                self.model_c.fromCameraInfo(load_camera_info('DepthCamera/color_camera_info.yaml'))
-            else:
-                self.model_c.fromCameraInfo(info_c)
-
-            if info_d is None:
-                self.model_d.fromCameraInfo(load_camera_info('DepthCamera/depth_camera_info.yaml'))
-            else:
-                self.model_d.fromCameraInfo(info_d)
-
-            if info_d2c is None:
-                with open('DepthCamera/depth_to_color_info.yaml', 'r') as f:
-                    data = yaml.safe_load(f)
-                rot = data['depth_to_color_extrinsics']['rotation']['data']
-                trans = data['depth_to_color_extrinsics']['translation']['data']
-            else:
-                rot = info_d2c['rotation']
-                trans = info_d2c['translation']
-            self.d2c_r = np.array(rot).reshape(3, 3)
-            self.d2c_t = np.array(trans).reshape(3,)
 
     def resize_intrinsics(model, new_w, new_h):
         old_w = model.width
@@ -213,35 +143,6 @@ if __name__ == '__main__':
 
         return model
 
-    # def get_offset_target(model_d, d2c_r, d2c_t, T_box_cam):
-    #     T_box_cam = np.asarray(T_box_cam).reshape(3)
-    #     ud, vd = model_d.project3dToPixel(T_box_cam)
-    #     T_color = d2c_r @ T_box_cam + d2c_t
-    #     uc, vc = model_d.project3dToPixel(T_color)
-    #     dx = uc - ud
-    #     dy = vc - vd
-    #     return dx, dy
-
-    # def shift_depth_by_offset(depth_img, dx, dy):
-    #     H, W = depth_img.shape
-    #     depth_img = depth_img.astype(np.float64)
-    #     depth_img[depth_img <= 0] = np.nan
-    #     shifted = np.full_like(depth_img, np.nan)
-    #     if dx >= 0:
-    #         xs_src = slice(0, W - dx)
-    #         xs_dst = slice(dx, W)
-    #     else:
-    #         xs_src = slice(-dx, W)
-    #         xs_dst = slice(0, W + dx)
-    #     if dy >= 0:
-    #         ys_src = slice(0, H - dy)
-    #         ys_dst = slice(dy, H)
-    #     else:
-    #         ys_src = slice(-dy, H)
-    #         ys_dst = slice(0, H + dy)
-    #     shifted[ys_dst, xs_dst] = depth_img[ys_src, xs_src]
-    #     return shifted
-
     def get_FPS(timelist, timeListHead):
         time_now = time.time()
         timelist[timeListHead] = time_now
@@ -253,16 +154,12 @@ if __name__ == '__main__':
             fps = len(timelist) / time_diff
         return fps, timelist, timeListHead
 
-    class PixelToCamera(Node):
+    class CheckSpearhead(DepthCamNode):
         def __init__(self):
-            super().__init__('pixel_to_camera')
-            self.info_msg = None
-            self.depth_camera = DepthCamera()
-            self.depth_camera.loadCameraInfo()
-            self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, 10)
-            self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, 10)
+            super().__init__('spearhead_cheak_node')
+            self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, qos_profile_sensor_data)
+            self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, qos)
             self.get_logger().info('Waiting for color frames...')
-            self.color_img = None
             self.suit_pc = None
             self.counts = None
             self.shape =[848,480]
@@ -273,10 +170,17 @@ if __name__ == '__main__':
             self.timelist = [0] * 10
             self.timeListHead = 0
 
-            cv2.namedWindow("Color Image")
+            cv2.namedWindow("Color Image", cv2.WINDOW_NORMAL)
 
-        def pc_callback(self, msg):
-            depth_pc = pc2.read_points_numpy(msg, field_names=("x","y","z"))
+        def depth_callback(self, msg):
+
+            self.depth_image = msg
+            depth = self.depth_camera.bridge.imgmsg_to_cv2(self.depth_image, desired_encoding='passthrough').astype(np.float32) / 1000.0
+            if self.shape != (depth.shape[1], depth.shape[0]):
+                self.shape = depth.shape[1], depth.shape[0]
+            self.pc = self.depth_camera.depth2points(depth)
+            depth_pc = self.pc
+            
             # 用外参偏移点云
             
             self.counts, self.suit_pc = filter_rotated_subboxes(depth_pc, self.T_box_cam, self.R_box_cam, self.depth_camera)
@@ -290,11 +194,12 @@ if __name__ == '__main__':
             cv2_color_img = self.depth_camera.bridge.imgmsg_to_cv2(self.color_img, desired_encoding='passthrough')
             cv2_img_bgr = cv2.cvtColor(cv2_color_img, cv2.COLOR_RGB2BGR)
             color_resized = cv2.resize(cv2_img_bgr, (self.shape[0], self.shape[1]), interpolation=cv2.INTER_LINEAR)
-            self.depth_camera.model_c = resize_intrinsics(
-                self.depth_camera.model_c,
-                self.shape[0],
-                self.shape[1]
-            )
+            if self.shape[0] != cv2_color_img.shape[0] or self.shape[1] != cv2_color_img.shape[1]:
+                self.depth_camera.model_c = resize_intrinsics(
+                    self.depth_camera.model_c,
+                    self.shape[0],
+                    self.shape[1]
+                )
             fps, self.timelist, self.timeListHead = get_FPS(self.timelist, self.timeListHead)
             cv2.putText(color_resized, f'FPS: {fps:.2f}', (self.shape[0] - 100, 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
             uv_boxes = project_subboxes(self.depth_camera.model_c, self.T_box_cam, self.R_box_cam)
@@ -348,43 +253,37 @@ if __name__ == '__main__':
             cv2.imshow("Color Image", color_resized)
             cv2.waitKey(1)
 
-    class PixelToCamera_t(Node):
+    class CheckSpearhead_t(DepthCamNode):
         def __init__(self):
-            super().__init__('pixel_to_camera_t')
-            self.info_msg = None
-            self.depth_camera = DepthCamera()
-            self.depth_camera.loadCameraInfo()
-            self.create_subscription(PointCloud2, '/camera/depth/points', self.pc_callback, 10)
+            super().__init__('spearhead_cheak_node')
+            self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, qos)
             self.get_logger().info('Waiting for color frames...')
-            self.color_img = None
             self.suit_pc = None
             self.counts = None
-            self.shape =[848,480]
             self.box_check = None
             # 立方体中心在相机前方1.0m, 向下0.33m
             self.T_box_cam = np.array([0, 0.33, 1.0])
             # 立方体相对于相机的旋转：俯视0° + 向右0°
             self.R_box_cam = rot_y(00) @ rot_x(-0)
 
-            cv2.namedWindow("Color Image")
-
-        def pc_callback(self, msg):
-            box_check_t = check_spearhead(msg, self.depth_camera, self.T_box_cam, self.R_box_cam)
+        def depth_callback(self, msg):
+            self.depth_image = msg
+            depth = self.depth_camera.bridge.imgmsg_to_cv2(self.depth_image, desired_encoding='passthrough').astype(np.float32) / 1000.0
+            self.pc = self.depth_camera.depth2points(depth)
+            box_check_t = check_spearhead(self.pc, self.depth_camera, self.T_box_cam, self.R_box_cam)
             if box_check_t != self.box_check:
                 self.box_check = box_check_t
                 print("Box check changed:", self.box_check)
+            elif self.box_check is None:
+                self.box_check = box_check_t
+                print("Initial box check:", self.box_check)
         
-    class PixelToCamera_tt(Node):
+    class CheckSpearhead_tt(DepthCamNode):
         def __init__(self):
-            super().__init__('pixel_to_camera')
-            self.info_msg = None
-            self.depth_camera = DepthCamera()
-            self.depth_camera.loadCameraInfo()
+            super().__init__('spearhead_cheak_node')
             self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, qos)
             self.get_logger().info('Waiting for depth frames...')
             self.suit_pc = None
-            self.pc = None
-            self.depth_image = None
             self.counts = None
             self.shape =[848,480]
             self.img = np.zeros((self.shape[1], self.shape[0], 3), dtype=np.uint8)
@@ -401,7 +300,7 @@ if __name__ == '__main__':
             threading.Thread(target=self.pc_worker, daemon=True).start()
             threading.Thread(target=self.dep2pc_worker, daemon=True).start()
 
-            cv2.namedWindow("Color Image")
+            cv2.namedWindow("Color Image, cv2.WINDOW_NORMAL")
 
         def depth_callback(self, msg):
             self.depth_image = msg
@@ -419,19 +318,7 @@ if __name__ == '__main__':
                 self.depth_ready.clear()
                 time_stamp = self.depth_image.header.stamp.sec + self.depth_image.header.stamp.nanosec * 1e-9
                 self.depth_image = None
-                fx = self.depth_camera.model_d.fx()
-                fy = self.depth_camera.model_d.fy()
-                cx = self.depth_camera.model_d.cx()
-                cy = self.depth_camera.model_d.cy()
-                mask = (depth > 0)
-                v, u = np.nonzero(mask)
-                d = depth[v, u]
-
-                x = (u - cx) * d / fx
-                y = (v - cy) * d / fy
-                z = d
-
-                self.pc = np.column_stack((x, y, z))
+                self.pc = self.depth_camera.depth2points(depth)
                 self.pc_ready.set()
                 self.delay = time.time() - time_stamp
 
@@ -515,24 +402,24 @@ if __name__ == '__main__':
 
     def main():
         rclpy.init()
-        node = PixelToCamera()
+        node = CheckSpearhead()
         rclpy.spin(node)
         node.destroy_node()
         rclpy.shutdown()
 
     def main1():
         rclpy.init()
-        node = PixelToCamera_t()
+        node = CheckSpearhead_t()
         rclpy.spin(node)
         node.destroy_node()
         rclpy.shutdown()
 
     def main2():
         rclpy.init()
-        node = PixelToCamera_tt()
+        node = CheckSpearhead_tt()
         rclpy.spin(node)
         node.destroy_node()
         rclpy.shutdown()
 
 if __name__ == '__main__':
-    main2()
+    main()

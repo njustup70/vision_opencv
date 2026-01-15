@@ -2,7 +2,6 @@
 # 数据点平均有异常去from_file.py改各个阈值再跑一遍
 # 跑完了把结果复制进attitude_info.yaml里
 import numpy as np
-from image_geometry import PinholeCameraModel
 from get_cam_xangle_point import fit_plane_from_depth
 from plan_PC_fit import timetest
 import rclpy
@@ -10,49 +9,13 @@ from rclpy.node import Node
 import time
 import cv2
 from sensor_msgs.msg import Image, CameraInfo
-from cv_bridge import CvBridge
-import yaml
 import threading
 from rclpy.qos import qos_profile_sensor_data
 from get_a_image import get_a_image
+from DepthCamera import DepthCamera, pix_to_cam, DepthCamNode
 
 points_list = []
 normal_list = []
-
-def load_camera_info(yaml_path: str) -> CameraInfo:
-    with open(yaml_path, 'r') as f:
-        data = yaml.safe_load(f)
-    msg = CameraInfo()
-    msg.width  = data['image_width']
-    msg.height = data['image_height']
-    msg.distortion_model = data['distortion_model']
-    msg.header.frame_id = data.get('header', {}).get('frame_id', '')
-    def to_float_list(x):
-        if isinstance(x, str):
-            x = x.strip('[]').replace(',', ' ').split()
-        return [float(i) for i in x]
-    msg.d = to_float_list(data['distortion_coefficients']['data'])
-    msg.k = to_float_list(data['camera_matrix']['data'])
-    msg.r = to_float_list(data['rectification_matrix']['data'])
-    msg.p = to_float_list(data['projection_matrix']['data'])
-    msg.binning_x = data.get('binning_x', 0)
-    msg.binning_y = data.get('binning_y', 0)
-    roi = data.get('roi', {})
-    msg.roi.x_offset = roi.get('x_offset', 0)
-    msg.roi.y_offset = roi.get('y_offset', 0)
-    msg.roi.height = roi.get('height', 0)
-    msg.roi.width = roi.get('width', 0)
-    msg.roi.do_rectify = roi.get('do_rectify', False)
-    return msg
-
-def pix_to_cam(u, v, depth, model):
-    ray = model.projectPixelTo3dRay((u, v))
-    muit = 1.0 / ray[2]
-    X = ray[0] * muit * depth
-    Y = ray[1] * muit * depth
-    Z = ray[2] * muit * depth # Z = depth
-    return X, Y, Z
-
 
 def average_normal(d2c_r=None):
     all_points = len(normal_list)
@@ -122,76 +85,23 @@ def average_normal(d2c_r=None):
     with open("DepthCamera/xangle.txt", "a") as f:
         f.write(f"Average normal vector: {average_good[0]:.6f},{average_good[1]:.6f},{average_good[2]:.6f}\n")
         f.write(f"Points used: {len(normal_array)}\n")
-    
-    
 
-class DepthCamera:
-    def __init__(self):
-        self.bridge = CvBridge()
-        self.model_d = PinholeCameraModel()
-        self.model_c = PinholeCameraModel()
-
-    def loadCameraInfo(self, info_d = None, info_c = None, info_d2c = None):
-        if info_d is None:
-            self.model_d.fromCameraInfo(load_camera_info('DepthCamera/depth_camera_info.yaml'))
-        else:
-            self.model_d.fromCameraInfo(info_d)
-
-        if info_c is None:
-            self.model_c.fromCameraInfo(load_camera_info('DepthCamera/color_camera_info.yaml'))
-        else:
-            self.model_c.fromCameraInfo(info_c)
-
-        if info_d2c is None:
-            with open('DepthCamera/depth_to_color_info.yaml', 'r') as f:
-                data = yaml.safe_load(f)
-            rot = data['depth_to_color_extrinsics']['rotation']['data']
-            trans = data['depth_to_color_extrinsics']['translation']['data']
-        else:
-            rot = info_d2c['rotation']
-            trans = info_d2c['translation']
-        self.d2c_r = np.array(rot).reshape(3, 3)
-        self.d2c_t = np.array(trans).reshape(3, 1)
-
-class GetCameraXAngle(Node):
+class GetCameraXAngle(DepthCamNode):
     def __init__(self):
         super().__init__('get_camera_xangle')
-        self.info_msg = None
-        self.get_logger().info('Waiting for /camera/depth/camera_info...')
-        try:
-            self.info_msg = self.wait_for_camera_info()
-            self.get_logger().info('Loaded camera info from topic.')
-        except TimeoutError:
-            self.get_logger().warn('Timeout waiting for /camera/depth/camera_info, loading from YAML instead.')
-        self.depth_camera = DepthCamera()
-        self.depth_camera.loadCameraInfo(info_d=self.info_msg)
         self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, qos_profile=qos_profile_sensor_data)
         self.create_subscription(Image, '/camera/color/image_raw', self.color_callback, qos_profile=qos_profile_sensor_data)
         self.get_logger().info('Waiting for camera_info and depth frames...')
-        self.depth_img = None
-        self.color_img = None
         self.final_img = None
+        self.color_img = None
+        self.depth_img = None
         self.point = 0
         self.one_point_times = 0
         self.depth_ready = threading.Event()
-        #self.point_list = [(159, 375),(196, 517),(302, 683),(422, 461),(455, 584),(538, 723),(588, 418),(625, 590),(671, 733),(758, 375),(807, 600),(851, 720),(914, 414),(974, 610),(1083, 733),(1030, 441)]
         self.point_list = points_list
         self.get_logger().info(f"Total points to process: {len(self.point_list)}")
 
         threading.Thread(target=self.working_process, daemon=True).start()
-
-
-    def wait_for_camera_info(self, timeout_sec=1.0):
-        #阻塞等待一次 /camera/depth/camera_info 消息
-        future = rclpy.task.Future()
-        def callback(msg):
-            if not future.done():
-                future.set_result(msg)
-        self.create_subscription(CameraInfo, '/camera/depth/camera_info', callback, 10)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
-        if not future.done():
-            raise TimeoutError("CameraInfo timeout")
-        return future.result()
 
     def color_callback(self, msg):
         self.color_img = msg

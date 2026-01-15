@@ -1,3 +1,5 @@
+# 将点云数据转换为深度图像，并与深度图像进行对比
+# 由于点云话题弃用，本文件无效
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CameraInfo, PointCloud2
@@ -5,15 +7,16 @@ from cv_bridge import CvBridge
 import numpy as np
 from image_geometry import PinholeCameraModel
 import sensor_msgs_py.point_cloud2 as pc2
+from rclpy.qos import qos_profile_sensor_data
 
 def cam_to_pix(X, Y, Z, model):
     uv = model.project3dToPixel((X, Y, Z))
     depth = Z
     return uv[0], uv[1], depth
 
-class CameraToPixel(Node):
+class PCCompareDep(Node):
     def __init__(self):
-        super().__init__('camera_to_pixel')
+        super().__init__('pc_compare_dep_node')
         self.cameraInfoInit = False
         self.bridge = CvBridge()
         self.model = PinholeCameraModel()
@@ -21,11 +24,11 @@ class CameraToPixel(Node):
         self.depth_data = None
         self.timelist = [0] * 10
         self.timeListHead = 0
-        self.create_subscription(CameraInfo, '/camera/depth/camera_info', self.info_init_callback, 10)
+        self.create_subscription(CameraInfo, '/camera/depth/camera_info', self.info_init_callback, qos_profile_sensor_data)
         #msg = wait_for_message('/camera/depth/camera_info', CameraInfo, self)
         #self.model.fromCameraInfo(msg)
-        self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, 10)
-        self.create_subscription(PointCloud2, '/camera/depth/points', self.point_callback, 10)
+        self.create_subscription(Image, '/camera/depth/image_raw', self.depth_callback, qos_profile_sensor_data)
+        self.create_subscription(PointCloud2, '/camera/depth/points', self.point_callback, qos_profile_sensor_data)
         #width = msg.width
         #height = msg.height
         #self.depth_map = np.full((height, width), np.nan, dtype=np.float32)
@@ -94,7 +97,7 @@ class CameraToPixel(Node):
 
 def main():
     rclpy.init()
-    node = CameraToPixel()
+    node = PCCompareDep()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
