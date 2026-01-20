@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import os
 import time
 import threading
@@ -70,65 +69,65 @@ class QRDetectNode(Node):
         
         cv2.destroyWindow(window_name)
 
-def main():
-    rclpy.init()
-    node = QRDetectNode()
+# def main():
+#     rclpy.init()
+#     node = QRDetectNode()
     
-    spin_thread = threading.Thread(
-        target=lambda: rclpy.spin(node) if node.running else None,
-        daemon=True
-    )
-    spin_thread.start()
+#     spin_thread = threading.Thread(
+#         target=lambda: rclpy.spin(node) if node.running else None,
+#         daemon=True
+#     )
+#     spin_thread.start()
     
-    try:
-        while node.running:
-            states = input("\n输入12个状态 (空格分隔) 或 'q'退出: ").strip()
-            if states == 'q':
-                break
+#     try:
+#         while node.running:
+#             states = input("\n输入12个状态 (空格分隔) 或 'q'退出: ").strip()
+#             if states == 'q':
+#                 break
             
-            states_list = states.split()
-            if len(states_list) != 12:
-                print("需要12个状态")
-                continue
+#             states_list = states.split()
+#             if len(states_list) != 12:
+#                 print("需要12个状态")
+#                 continue
             
-            path, hex_data = QRCoder.encode(
-                states_list,
-                size_cm=15,
-                dpi=220,
-                save_dir="./qr_codes"
-            )
-            print(f"生成: {hex_data}")
+#             path, hex_data = QRCoder.encode(
+#                 states_list,
+#                 size_cm=15,
+#                 dpi=220,
+#                 save_dir="./qr_codes"
+#             )
+#             print(f"生成: {hex_data}")
             
-            img = cv2.imread(path)
-            if img is None:
-                print("无法加载图片")
-                continue
+#             img = cv2.imread(path)
+#             if img is None:
+#                 print("无法加载图片")
+#                 continue
             
-            print("在便携屏显示2秒...")
-            node.show_qr(img, 200)
+#             print("在便携屏显示2秒...")
+#             node.show_qr(img, 200)
             
-            print("\n请对准摄像头，等待识别...")
-            node.detected_data = None
+#             print("\n请对准摄像头，等待识别...")
+#             node.detected_data = None
             
-            start_time = time.time()
-            while time.time() - start_time < 10:
-                if node.detected_data:
-                    if node.detected_data == hex_data:
-                        print("✅ 验证成功")
-                    else:
-                        print(f"⚠️  不一致: {node.detected_data}")
-                    break
-                time.sleep(0.1)
-            else:
-                print("❌ 识别超时")
+#             start_time = time.time()
+#             while time.time() - start_time < 10:
+#                 if node.detected_data:
+#                     if node.detected_data == hex_data:
+#                         print("✅ 验证成功")
+#                     else:
+#                         print(f"⚠️  不一致: {node.detected_data}")
+#                     break
+#                 time.sleep(0.1)
+#             else:
+#                 print("❌ 识别超时")
                 
-    except KeyboardInterrupt:
-        print("\n退出")
-    finally:
-        node.running = False
-        node.destroy_node()
-        rclpy.shutdown()
-        cv2.destroyAllWindows()
+#     except KeyboardInterrupt:
+#         print("\n退出")
+#     finally:
+#         node.running = False
+#         node.destroy_node()
+#         rclpy.shutdown()
+#         cv2.destroyAllWindows()
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()
