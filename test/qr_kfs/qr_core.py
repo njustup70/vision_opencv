@@ -9,7 +9,6 @@ class QRCoder:
     REVERSE_MAP = {v: k for k, v in STATUS_MAP.items()}
     RESERVE_BITS = "00000000"
     
-    # 编码
     @classmethod
     def encode(cls, states, size_cm, dpi, save_dir="./qr_codes"):
         """编码状态为二维码"""
@@ -61,7 +60,7 @@ class QRCoder:
         
         return path, hex_str
     
-    # 解码
+    # 解码函数
     @classmethod
     def decode(cls, hex_str):
         if not hex_str or len(hex_str) != 8:

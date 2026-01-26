@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -12,7 +13,7 @@ class CameraNode(Node):
         self.declare_parameter('contrast', 80.0)
         self.declare_parameter('exposure', 30.0)
         
-        self.declare_parameter('camera_index', 11)
+        self.declare_parameter('camera_index', 1)
         self.camera_index = self.get_parameter('camera_index').value
         
         self.declare_parameter('fps', 60)
@@ -90,14 +91,14 @@ class CameraNode(Node):
         cv2.destroyAllWindows()
         super().destroy_node()
 
-# def main(args=None):
-#     rclpy.init(args=args)
+def main(args=None):
+    rclpy.init(args=args)
     
-#     try:
-#         node = CameraNode()
-#         rclpy.spin(node)
-#     except KeyboardInterrupt:
-#         pass
+    try:
+        node = CameraNode()
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
 
-# if __name__ == '__main__':
-#     main()
+if __name__ == '__main__':
+    main()
