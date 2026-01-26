@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
@@ -10,10 +9,10 @@ class CameraNode(Node):
         super().__init__('camera_node')
         
         self.declare_parameter('brightness', 10.0)
-        self.declare_parameter('contrast', 80.0)
-        self.declare_parameter('exposure', 30.0)
+        self.declare_parameter('contrast', 8.0)
+        self.declare_parameter('exposure', 300.0)
         
-        self.declare_parameter('camera_index', 1)
+        self.declare_parameter('camera_index', 11)
         self.camera_index = self.get_parameter('camera_index').value
         
         self.declare_parameter('fps', 60)
