@@ -1,0 +1,30 @@
+board_outer_size_mm: 150
+charuco:
+  squares_x: 5
+  squares_y: 5
+  square_length_m: 0.03   # 150mm / 5 = 30mm
+  marker_length_m: 0.024  # 0.8 * square (与 generate_charuco_board.py 默认 marker-to-square=0.8 一致)
+  dictionary: "DICT_6X6_250"
+  ids_start: 0
+aruco_board_fallback:
+  enable: true
+  min_markers: 1
+  use_refine_detected_markers: true
+pnp:
+  prefer: "SOLVEPNP_IPPE"
+  fallback: "SOLVEPNP_ITERATIVE"
+gating:
+  min_charuco_corners: 12
+  max_mean_reproj_px: 0.6
+  max_max_reproj_px: 1.5
+  min_border_px: 20
+  # 内参标定目标帧数（charuco_calibration_node 会读取此值）
+  target_samples: 100
+  # 内参标定采样步长：每 20 帧取 1 帧，留足时间改变棋盘姿态
+  sample_stride: 20
+topics:
+  image: "/hik_camera/image_raw"
+  camera_info: "/hik_camera/camera_info"
+frames:
+  camera_frame: "hik_camera_optical_frame"
+  board_frame: "spear_board_frame"

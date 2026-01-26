@@ -1,0 +1,58 @@
+image_width: 1280
+image_height: 1024
+camera_name: hik_camera
+camera_matrix:
+  rows: 3
+  cols: 3
+  data:
+  - 1322.8397832601186
+  - 0.0
+  - 623.2118921253351
+  - 0.0
+  - 1338.418629358359
+  - 509.76668739080276
+  - 0.0
+  - 0.0
+  - 1.0
+distortion_model: plumb_bob
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data:
+  - -0.131611456394353
+  - 0.9770122703554055
+  - -0.0037105334423302764
+  - -0.0033209523486226952
+  - -2.6406900561614206
+rectification_matrix:
+  rows: 3
+  cols: 3
+  data:
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+projection_matrix:
+  rows: 3
+  cols: 4
+  data:
+  - 1322.8397832601186
+  - 0.0
+  - 623.2118921253351
+  - 0.0
+  - 0.0
+  - 1338.418629358359
+  - 509.76668739080276
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+  - 0.0
+spear_vision:
+  rms_reprojection_px: 0.8476409961945591
+  num_samples: 100

@@ -1,0 +1,8 @@
+# KFS数据集配置
+path: /home/fishros/yolov11_ws/vision_opencv/yolo/kfs_data
+train: images/train
+val: images/train
+names:
+  0: shelf      # 架子
+  1: kfs_red    # 红色KFS
+  2: kfs_blue   # 蓝色KFS

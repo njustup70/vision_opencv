@@ -1,0 +1,94 @@
+topics:
+  # 运行时可按需覆盖；驱动默认 CameraInfo 话题为 image + "/camera_info"
+  image: "/hik_camera/image_raw"
+  camera_info: "/hik_camera/camera_info"
+
+# 工作模式：
+# - calibrate：标定阶段（画面同时包含大板+小板），多帧固化 primary_T_secondary 并写入配置文件
+# - run：运行阶段（只检测大板），使用已固化的 primary_T_secondary 推算矛头 tip 位姿
+mode: "calibrate"
+
+# 标定（固化 primary_T_secondary）参数：
+# - 建议让两块板在画面中都“尽量居中、角点尽量多、姿态尽量丰富”，并保持稳定几秒钟；
+# - 标定完成后节点会把 primary_to_secondary 写回本文件，并把 mode 自动改成 "run"（可关闭）。
+calibration:
+  required_samples: 100
+  # 外参标定采样步长：每 2 帧取 1 帧（约 10Hz），依靠 gating + confidence 剔除坏样本
+  sample_stride: 2
+  min_primary_confidence: 0.6
+  min_secondary_confidence: 0.6
+  outlier_translation_m: 0.002
+  outlier_rotation_deg: 2.0
+  save_to_config: true
+  # 为空则覆盖 config_path 指向的文件；你也可以填一个新路径（避免覆盖带注释的模板文件）
+  output_config_yaml: ""
+  auto_finalize: true
+  auto_switch_to_run: true
+  # 标定完成后自动退出（用于“一键标定后退出”的流程）
+  auto_exit: true
+
+# primary_T_secondary（固化外参）：
+# - 标定完成后会自动写入；
+# - 运行阶段如果 secondary 不在画面中，就用这个外参推算 secondary/tip。
+primary_to_secondary: {}
+
+frames:
+  # 若不填写，节点默认使用 Image header.frame_id
+  camera_frame: "camera_frame"
+  primary_frame: "spear_board_frame"
+  secondary_frame: "spear_tip_charuco_frame"
+  tip_frame: "spear_tip_frame"
+
+# 大板（倾斜放置用于高精度 PnP）
+primary_charuco:
+  squares_x: 5
+  squares_y: 5
+  square_length_m: 0.03
+  marker_length_m: 0.024
+  dictionary: "DICT_6X6_250"
+  ids_start: 0
+
+# 小板（贴在矛头平面上，替代单个小 ArUco，提高稳定性）
+secondary_charuco:
+  squares_x: 5
+  squares_y: 5
+  # 请按你实际打印尺寸修改（下面以 5cm x 5cm 为例：5*10mm=50mm 宽，5*10mm=50mm 高）
+  square_length_m: 0.01
+  marker_length_m: 0.008
+  dictionary: "DICT_6X6_250"
+  # 强烈建议与大板错开，避免两块板 marker ID 冲突
+  ids_start: 100
+
+pnp:
+  prefer: "SOLVEPNP_IPPE"
+  fallback: "SOLVEPNP_ITERATIVE"
+
+aruco_board_fallback:
+  enable: true
+  min_markers: 1
+  use_refine_detected_markers: true
+
+secondary_aruco_fallback:
+  enable: true
+  min_markers: 1
+  use_refine_detected_markers: true
+
+gating_primary:
+  min_charuco_corners: 12
+  max_mean_reproj_px: 0.6
+  max_max_reproj_px: 1.5
+  min_border_px: 20
+
+gating_secondary:
+  # 5x5 的最大 ChArUco 角点数为 (5-1)*(5-1)=16
+  # 这里设置为 10：既能保证角点数量足够稳，又不至于在轻微遮挡时完全无法采样
+  min_charuco_corners: 10
+  max_mean_reproj_px: 0.8
+  max_max_reproj_px: 2.0
+  min_border_px: 10
+
+tip:
+  # tip 相对 secondary board 坐标系的固定偏移（同平面场景 dz 通常为 0）
+  # 你原先“2D 几何加减”的量可直接写到这里
+  offset_m: [0.0, 0.0, 0.0]
+  rpy_deg: [0.0, 0.0, 0.0]

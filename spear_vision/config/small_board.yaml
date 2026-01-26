@@ -1,0 +1,38 @@
+board_outer_size_mm: 50
+charuco:
+  # 小板（5cm x 5cm）：
+  # - 5 格 * 10mm = 50mm
+  # - marker_length = 0.8 * square_length（与 generate_charuco_board.py 默认一致）
+  squares_x: 5
+  squares_y: 5
+  square_length_m: 0.01
+  marker_length_m: 0.008
+  dictionary: "DICT_6X6_250"
+  # 小板 ID 区间从 100 开始（与大板 0.. 区分，避免互相误匹配）
+  ids_start: 100
+
+aruco_board_fallback:
+  enable: true
+  min_markers: 1
+  use_refine_detected_markers: true
+
+pnp:
+  prefer: "SOLVEPNP_IPPE"
+  fallback: "SOLVEPNP_ITERATIVE"
+
+gating:
+  # 5x5 的最大 ChArUco 角点数为 (5-1)*(5-1)=16
+  min_charuco_corners: 10
+  max_mean_reproj_px: 0.6
+  max_max_reproj_px: 1.5
+  min_border_px: 10
+
+topics:
+  image: "/hik_camera/image_raw"
+  camera_info: "/hik_camera/camera_info"
+
+frames:
+  # 若不填写，节点默认使用 Image header.frame_id
+  camera_frame: "camera_frame"
+  board_frame: "spear_small_board_frame"
+

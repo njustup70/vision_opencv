@@ -1,39 +1,30 @@
-from comet_ml import Experiment
-
 from ultralytics import YOLO
+import os
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+config_path = "yaml/kfs.yaml"
 
-if __name__ == '__main__':
-    # 初始化 Comet 实验
-    experiment = Experiment(
-        api_key="JOoztjsikS7g0ZTsEvLIWdgTS",
-        project_name="rc2026-yolo",
-        workspace="yc-dlan"
-    )
+import glob
+images = glob.glob("../kfs_data/images/train/*.jpg") + glob.glob("../kfs_data/images/train/*.png")
+labels = glob.glob("../kfs_data/labels/train/*.txt")
 
-    # 记录超参数
-    hyper_params = {
-        "model": "yolo11n",
-        "epochs": 100,
-        "imgsz": 640,
-        "batch": 16,
-        "amp": True
-    }
-    experiment.log_parameters(hyper_params)
+print(f"找到 {len(images)} 张图片, {len(labels)} 个标注文件")
 
-    # 加载模型
-    model = YOLO("yolo11n.pt")
+if len(images) == 0:
+    print("错误: 没有训练图片！")
+    print("请将架子图片放入 kfs_data/images/train/")
+    exit(1)
 
-    # 开始训练
-    results = model.train(
-        data="yaml/demo_train.yaml",
-        epochs=hyper_params["epochs"],
-        imgsz=hyper_params["imgsz"],
-        batch=hyper_params["batch"],
-        workers=0,
-        amp=hyper_params["amp"]
-    )
+# 开始训练
+print("开始训练...")
+model = YOLO("yolo11n.pt")
+model.train(
+    data=config_path,
+    epochs=500,
+    imgsz=640,
+    batch=8,
+    device="0"
+)
 
-    # 手动记录最终指标到 Comet
-    experiment.log_metric("final_loss", results.metrics["box_loss"])
-    experiment.log_metric("final_map50", results.metrics["mAP_50"])
+print("训练完成！")
+print(f"模型保存在: runs/detect/train/weights/best.pt")
