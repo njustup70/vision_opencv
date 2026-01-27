@@ -7,7 +7,7 @@ def generate_launch_description():
     return LaunchDescription([
         # R1机器人：二维码显示节点
         Node(
-            package='vision_opencv',
+            package='comm_ws',
             executable='qr_detect_node',
             name='qr_display_r1',
             output='screen',
@@ -17,7 +17,7 @@ def generate_launch_description():
         
         # R2机器人：摄像头节点
         Node(
-            package='vision_opencv',
+            package='comm_ws',
             executable='camera_node',
             name='camera_r2',
             output='screen',
@@ -33,7 +33,7 @@ def generate_launch_description():
         
         # R2机器人：二维码识别节点
         Node(
-            package='vision_opencv',
+            package='comm_ws',
             executable='qr_detect_node',
             name='qr_detect_r2',
             output='screen',
