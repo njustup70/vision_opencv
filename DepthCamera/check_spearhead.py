@@ -1,6 +1,7 @@
-# 矛头检测模块
 import numpy as np
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+
+# from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, qos_profile_sensor_data
+
 # qos = QoSProfile(
 #     depth=1,  # 只保留最新一帧
 #     reliability=QoSReliabilityPolicy.BEST_EFFORT,  # 尽量保证丢帧而不阻塞
@@ -46,6 +47,14 @@ def rot_y(deg):
         [ np.cos(rad),0,np.sin(rad)],
         [0,1,0],
         [-np.sin(rad),0,np.cos(rad)]
+    ])
+
+def rot_z(deg):
+    rad = np.deg2rad(deg)
+    return np.array([
+        [np.cos(rad),-np.sin(rad),0],
+        [np.sin(rad), np.cos(rad),0],
+        [0,0,1]
     ])
 
 def filter_rotated_subboxes(pc_dep, T_box_cam, R_box_cam, model):

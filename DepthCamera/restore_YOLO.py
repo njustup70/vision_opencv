@@ -33,5 +33,5 @@ def img_preprocess(img, depression_angle, target_loc, target_direct = 0, target_
     return roi_img, roi_2d
 
 def get_yolo_result(model, img):
-    result = model.predict(source=img, save=False, save_txt=False, conf=0.005, iou=0.45)
+    result = model.predict(source=img, save=False, save_txt=False, conf=0.25, iou=0.45)
     return result

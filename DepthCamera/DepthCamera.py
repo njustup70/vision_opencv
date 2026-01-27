@@ -6,6 +6,7 @@ import numpy as np
 from cv_bridge import CvBridge
 from rclpy.node import Node
 import rclpy
+from pathlib import Path
 
 def load_camera_info(yaml_path: str) -> CameraInfo:
     with open(yaml_path, 'r') as f:
@@ -42,18 +43,19 @@ class DepthCamera:
 
     def loadCameraInfo(self, info_c = None, info_d = None, info_d2c = None):
 
+        base_dir = Path(__file__).resolve().parent
         if info_c is None:
-            self.model_c.fromCameraInfo(load_camera_info('DepthCamera/color_camera_info.yaml'))
+            self.model_c.fromCameraInfo(load_camera_info(str(base_dir / 'color_camera_info.yaml')))
         else:
             self.model_c.fromCameraInfo(info_c)
 
         if info_d is None:
-            self.model_d.fromCameraInfo(load_camera_info('DepthCamera/depth_camera_info.yaml'))
+            self.model_d.fromCameraInfo(load_camera_info(str(base_dir / 'depth_camera_info.yaml')))
         else:
             self.model_d.fromCameraInfo(info_d)
 
         if info_d2c is None:
-            with open('DepthCamera/depth_to_color_info.yaml', 'r') as f:
+            with open(str(base_dir / 'depth_to_color_info.yaml'), 'r') as f:
                 data = yaml.safe_load(f)
             rot = data['depth_to_color_extrinsics']['rotation']['data']
             trans = data['depth_to_color_extrinsics']['translation']['data']
@@ -62,6 +64,10 @@ class DepthCamera:
             trans = info_d2c['translation']
         self.d2c_r = np.array(rot).reshape(3, 3)
         self.d2c_t = np.array(trans).reshape(3,)
+
+        with open(str(base_dir / 'attitude_info.yaml'), 'r') as f:
+            data = yaml.safe_load(f)
+        self.depression_angle = data['attitude_angle']['depression_angle']['data']
 
     def depth2points(self, depth_img):
         fx = self.model_d.fx()
@@ -81,8 +87,6 @@ class DepthCamNode(Node):
     def __init__(self, nodename):
         super().__init__(nodename)
         self.depth_camera = DepthCamera()
-        self.depth_image = None
-        self.color_image = None
         self.pc = None
         self.info_msg = None
         
