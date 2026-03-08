@@ -32,21 +32,32 @@ def generate_launch_description():
             DeclareLaunchArgument("camera_calibration_yaml", default_value=default_cam),
             DeclareLaunchArgument("show_opencv_window", default_value="true"),
             DeclareLaunchArgument("opencv_window_name", default_value="small_board_view"),
+            DeclareLaunchArgument("require_start_command", default_value="false"),
+            DeclareLaunchArgument("command_topic", default_value="~/command"),
+            DeclareLaunchArgument("start_command_value", default_value="spear"),
+            DeclareLaunchArgument("publish_offsets", default_value="true"),
+            DeclareLaunchArgument("offset_topic", default_value="~/offset_mm"),
             Node(
                 package="spear_vision",
                 executable="small_board_pose",
                 name="small_board_pose",
                 output="screen",
-                emulate_tty=True,
+                #emulate_tty=True,
                 parameters=[
                     {
                         "config_path": LaunchConfiguration("config_path"),
                         "camera_calibration_yaml": LaunchConfiguration("camera_calibration_yaml"),
                         "show_opencv_window": ParameterValue(LaunchConfiguration("show_opencv_window"), value_type=bool),
                         "opencv_window_name": LaunchConfiguration("opencv_window_name"),
+                        "require_start_command": ParameterValue(
+                            LaunchConfiguration("require_start_command"), value_type=bool
+                        ),
+                        "command_topic": LaunchConfiguration("command_topic"),
+                        "start_command_value": LaunchConfiguration("start_command_value"),
+                        "publish_offsets": ParameterValue(LaunchConfiguration("publish_offsets"), value_type=bool),
+                        "offset_topic": LaunchConfiguration("offset_topic"),
                     }
                 ],
             ),
         ]
     )
-

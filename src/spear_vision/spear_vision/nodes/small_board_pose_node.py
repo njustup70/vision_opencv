@@ -4,6 +4,8 @@
 目标：
 - 只用“小板”（5cm x 5cm 的 5x5 ChArUco）做 PnP；
 - 读取相机内参 YAML（camera.yaml），输出 camera_T_small_board；
+- 可选：等待字符串控制话题收到 "spear" 后再开始计算；
+- 发布左右/上下偏移量到 ROS2 结果话题，方便主逻辑直接订阅；
 - 运行时弹出 OpenCV 窗口可视化：
   1) 检测到的 ArUco ID、角点、ChArUco 角点；
   2) 重投影误差 mean/max（px）与 confidence；
@@ -32,7 +34,7 @@ from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import CameraInfo, Image
-from std_msgs.msg import Float32, Float64, String
+from std_msgs.msg import Float32, Float32MultiArray, Float64, String
 from tf2_ros import TransformBroadcaster
 
 from spear_vision.core.board_pose_estimator import BoardPoseEstimator, BoardSpec, GateSpec, PoseEstimate
@@ -75,6 +77,14 @@ class SmallBoardPoseNode(Node):
         self.declare_parameter("publish_tf", True)
         self.declare_parameter("publish_debug_image", True)
         self.declare_parameter("publish_pose", True)
+        self.declare_parameter("publish_offsets", True)
+
+        # 控制话题：可选要求先收到 start_command_value 才开始算
+        self.declare_parameter("require_start_command", False)
+        self.declare_parameter("command_topic", "~/command")
+        self.declare_parameter("start_command_value", "spear")
+        self.declare_parameter("stop_command_value", "stop")
+        self.declare_parameter("offset_topic", "~/offset_mm")
 
         # 可视化开关（默认开启）
         self.declare_parameter("show_opencv_window", True)
@@ -100,6 +110,7 @@ class SmallBoardPoseNode(Node):
 
         self._bridge = CvBridge()
         self._intrinsics: Optional[CameraIntrinsics] = None
+        self._pose_enabled = not bool(self.get_parameter("require_start_command").value)
 
         self._pose_estimator = BoardPoseEstimator()
         self._pose_filter = PoseLowPassFilter()
@@ -246,6 +257,16 @@ class SmallBoardPoseNode(Node):
         self._err_max_pub = self.create_publisher(Float64, "~/reproj_error_max_px", 10)
         self._confidence_pub = self.create_publisher(Float32, "~/confidence", 10)
         self._method_pub = self.create_publisher(String, "~/method", 10)
+        offset_topic = str(self.get_parameter("offset_topic").value).strip() or "~/offset_mm"
+        self._offset_pub = self.create_publisher(Float32MultiArray, offset_topic, 10)
+
+        command_topic = str(self.get_parameter("command_topic").value).strip()
+        self._command_sub = None
+        if command_topic:
+            self._command_sub = self.create_subscription(String, command_topic, self._on_command, 10)
+            if bool(self.get_parameter("require_start_command").value):
+                start_cmd = str(self.get_parameter("start_command_value").value).strip()
+                self.get_logger().info(f"Waiting for start command '{start_cmd}' on {command_topic}")
 
         self._tf_broadcaster = TransformBroadcaster(self)
 
@@ -258,7 +279,29 @@ class SmallBoardPoseNode(Node):
             return
         self._intrinsics = intr
 
+    def _on_command(self, msg: String) -> None:
+        if not bool(self.get_parameter("require_start_command").value):
+            return
+
+        data = msg.data.strip()
+        start_cmd = str(self.get_parameter("start_command_value").value).strip()
+        stop_cmd = str(self.get_parameter("stop_command_value").value).strip()
+
+        if data == start_cmd:
+            if not self._pose_enabled:
+                self.get_logger().info(f"Received start command '{data}', pose estimation enabled")
+            self._pose_enabled = True
+            return
+
+        if stop_cmd and data == stop_cmd:
+            if self._pose_enabled:
+                self.get_logger().info(f"Received stop command '{data}', pose estimation paused")
+            self._pose_enabled = False
+
     def _on_image(self, msg: Image) -> None:
+        if bool(self.get_parameter("require_start_command").value) and not self._pose_enabled:
+            return
+
         gray = self._bridge.imgmsg_to_cv2(msg, desired_encoding="mono8")
 
         # 1) ArUco marker 检测
@@ -330,10 +373,22 @@ class SmallBoardPoseNode(Node):
         rt = self._pose_filter.update(rvec_tvec_to_rt(est.rvec, est.tvec), alpha, rotation_mode=mode)
         return replace(est, rvec=rt.rvec, tvec=rt.tvec)
 
+    @staticmethod
+    def _tvec_to_offsets_mm(tvec: np.ndarray) -> Optional[tuple[float, float, float]]:
+        t = np.array(tvec, dtype=np.float64).reshape(3)
+        if not np.isfinite(t).all():
+            return None
+
+        x_mm = float(t[0] * 1000.0)
+        y_mm = float(t[1] * 1000.0)
+        z_mm = float(t[2] * 1000.0)
+        return (-x_mm, -y_mm, z_mm)
+
     def _publish_outputs(self, msg: Image, gray: np.ndarray, detection, est: PoseEstimate) -> None:
         stamp = msg.header.stamp
         camera_frame = str(self.get_parameter("camera_frame").value).strip() or msg.header.frame_id
         board_frame = str(self.get_parameter("board_frame").value).strip()
+        offsets_mm: Optional[tuple[float, float, float]] = None
 
         if est.ok and est.rvec is not None and est.tvec is not None:
             # 防御性：若 rvec/tvec 出现 NaN/Inf，则不要发布 Pose/TF（否则你会看到坐标系“时有时无”）
@@ -356,6 +411,10 @@ class SmallBoardPoseNode(Node):
                     self._err_max_pub.publish(Float64(data=float(est.max_reproj_px)))
                 self._confidence_pub.publish(Float32(data=float(est.confidence)))
                 self._method_pub.publish(String(data=f"{est.used}:{est.method}"))
+                offsets_mm = self._tvec_to_offsets_mm(est.tvec)
+                if bool(self.get_parameter("publish_offsets").value) and offsets_mm is not None:
+                    left_mm, up_mm, _ = offsets_mm
+                    self._offset_pub.publish(Float32MultiArray(data=[left_mm, up_mm]))
 
         if not bool(self.get_parameter("publish_debug_image").value):
             return
@@ -408,8 +467,7 @@ class SmallBoardPoseNode(Node):
             )
 
             # 输出平移（mm，精确到 0.001mm）
-            t = np.array(est.tvec, dtype=np.float64).reshape(3)
-            if not np.isfinite(t).all():
+            if offsets_mm is None:
                 cv2.putText(
                     bgr,
                     "invalid pose (tvec has NaN/Inf) -> TF suppressed",
@@ -429,13 +487,7 @@ class SmallBoardPoseNode(Node):
                         self.get_logger().warn(f"OpenCV window disabled (GUI not available): {exc}")
                         self.set_parameters([rclpy.parameter.Parameter("show_opencv_window", value=False)])
                 return
-            x_mm = float(t[0] * 1000.0)
-            y_mm = float(t[1] * 1000.0)
-            z_mm = float(t[2] * 1000.0)
-
-            left_mm = -x_mm
-            up_mm = -y_mm
-            forward_mm = z_mm
+            left_mm, up_mm, forward_mm = offsets_mm
 
             cv2.putText(
                 bgr,
