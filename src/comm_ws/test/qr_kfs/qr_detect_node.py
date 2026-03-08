@@ -27,8 +27,8 @@ class QRDetectNode(Node):
             # R1机器人：二维码显示模式
             self.get_logger().info('启动R1机器人（二维码显示模式）')
             
-            # 订阅code_recognize话题
-            self.create_subscription(String, 'code_recognize', self.code_callback, 10)
+            # 订阅code_display话题
+            self.create_subscription(String, 'code_display', self.code_callback, 10)
             
             # 初始化二维码相关变量
             self.current_qr_img = None
@@ -41,12 +41,16 @@ class QRDetectNode(Node):
             # R2机器人：摄像头+识别模式
             self.get_logger().info('启动R2机器人（摄像头+识别模式）')
             
-            # 订阅摄像头图像
-            self.create_subscription(Image, 'camera/image_raw', self.image_callback, 100)
+            # 订阅开始start_qr_detection话题
+            self.create_subscription(String, 'start_qr_detection', self.start_detection_callback, 10)
+            # 订阅结束stop_qr_detection话题
+            self.create_subscription(String, 'stop_qr_detection', self.stop_detection_callback, 10)
             
             # 发布识别结果
             self.result_publisher = self.create_publisher(String, 'qr_detection_result', 10)
             
+            # 摄像头订阅初始为 None
+            self.camera_sub = None
             self.last_detected_data = None
             
         else:
@@ -118,6 +122,20 @@ class QRDetectNode(Node):
         
         cv2.destroyAllWindows()
     
+    def start_detection_callback(self, msg):
+        """R2：收到触发信号后，创建摄像头订阅"""
+        if self.camera_sub is None:
+            self.get_logger().info('收到启动命令，开始订阅摄像头图像')
+            # 创建摄像头订阅并保存对象
+            self.camera_sub = self.create_subscription(
+                Image, 
+                'camera/image_raw', 
+                self.image_callback, 
+                100
+            )
+        else:
+            self.get_logger().info('摄像头订阅已存在，忽略重复启动')
+
     def image_callback(self, msg):
         """R2: 处理摄像头图像进行二维码识别"""
         try:
@@ -166,6 +184,15 @@ class QRDetectNode(Node):
         except Exception as e:
             self.get_logger().warn(f'图像处理错误: {str(e)[:50]}')
     
+    def stop_detection_callback(self, msg):
+        """收到结束信号后，销毁摄像头订阅"""
+        if self.camera_sub is not None:
+            self.get_logger().info('收到停止命令，停止订阅摄像头图像')
+            self.destroy_subscription(self.camera_sub)
+            self.camera_sub = None
+        else:
+            self.get_logger().info('摄像头订阅已不存在，忽略重复停止')
+
     def destroy_node(self):
         """清理资源"""
         self.running = False
