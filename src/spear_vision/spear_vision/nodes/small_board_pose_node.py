@@ -84,7 +84,7 @@ class SmallBoardPoseNode(Node):
         self.declare_parameter("command_topic", "/update_exec_req")
         self.declare_parameter("start_command_value", "spear_build")
         self.declare_parameter("stop_command_value", "stop")
-        self.declare_parameter("offset_topic", "/offset_mm")
+        self.declare_parameter("offset_topic", "/small_board_pose/offset_mm")
 
         # 可视化开关（默认开启）
         self.declare_parameter("show_opencv_window", True)
@@ -257,7 +257,7 @@ class SmallBoardPoseNode(Node):
         self._err_max_pub = self.create_publisher(Float64, "~/reproj_error_max_px", 10)
         self._confidence_pub = self.create_publisher(Float32, "~/confidence", 10)
         self._method_pub = self.create_publisher(String, "~/method", 10)
-        offset_topic = str(self.get_parameter("offset_topic").value).strip() or "/offset_mm"
+        offset_topic = str(self.get_parameter("offset_topic").value).strip() or "/small_board_pose/offset_mm"
         self._offset_pub = self.create_publisher(Float32MultiArray, offset_topic, 10)
 
         command_topic = str(self.get_parameter("command_topic").value).strip()

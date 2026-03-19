@@ -124,6 +124,7 @@ class QRDetectNode(Node):
         """R2: 处理 /update_exec_req 指令"""
         cmd = msg.data.strip()
         if cmd == "qr_recog":
+            self.last_detected_data = None
             if self.camera_sub is None:
                 self.get_logger().info('收到识别启动指令，开始订阅摄像头图像')
                 self.camera_sub = self.create_subscription(
@@ -135,6 +136,7 @@ class QRDetectNode(Node):
             else:
                 self.get_logger().info('识别已启动，忽略重复指令')
         elif cmd == "qr_recog_off":
+            self.last_detected_data = None
             if self.camera_sub is not None:
                 self.get_logger().info('收到识别停止指令，停止订阅摄像头图像')
                 self.destroy_subscription(self.camera_sub)
