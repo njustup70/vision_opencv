@@ -23,7 +23,7 @@ except Exception:  # pragma: no cover
 
 
 # Fixed configuration (no ROS2 parameters by default)
-IMAGE_TOPIC = "/hik_camera/image_raw"
+IMAGE_TOPIC = "/hik_camera/image"
 CAMERA_INFO_TOPIC = "/hik_camera/camera_info"
 ARUCO_DICTIONARY = "DICT_6X6_250"
 TARGET_MARKER_ID = 100
