@@ -11,10 +11,10 @@ class HighPrecisionPoseEstimator:
         assert cv_major > 4 or (cv_major == 4 and cv_minor >= 10), \
             f"检测到 OpenCV 版本为 {cv2.__version__}，本解算器要求版本 >= 4.10.0 以支持新的 ArucoDetector 接口。"
         # 1. 配置字典和板子 (请根据你的物理板子实际尺寸修改)
-        self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+        self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_100)
         # 参数: (列数, 行数, 棋盘格方块边长, 标记边长, 字典)
         # 单位建议用米(m)，例如 0.04 表示 4cm
-        self.board = cv2.aruco.CharucoBoard((5, 7), 0.04, 0.02, self.dictionary)
+        self.board = cv2.aruco.CharucoBoard((5, 5), 0.1, 0.07, self.dictionary)
         
         # 2. 配置高精度检测参数
         self.detector_params = cv2.aruco.DetectorParameters()
@@ -26,7 +26,7 @@ class HighPrecisionPoseEstimator:
             self.board, 
             detectorParams=self.detector_params
         )
-        
+
         if K is not None:
             self.K = K
         else:
@@ -43,7 +43,7 @@ class HighPrecisionPoseEstimator:
     def on_image(self, frame):
         """数据回调函数"""
         if frame is None:
-            return
+            return None, None
 
         # 执行检测：得到精修后的棋盘格角点
         # charuco_corners: 2D 坐标, charuco_ids: 角点 ID
@@ -93,13 +93,31 @@ class HighPrecisionPoseEstimator:
         return rvecs[idx], tvecs[idx]
 
     def _draw_result(self, frame, corners, ids, rvec, tvec):
-        # 画出角点
-        cv2.aruco.drawDetectedCornersCharuco(frame, corners, ids)
+        # 检查是否有有效的位姿
+        if rvec is None or tvec is None:
+            return frame
+        # 角点有效时再画，避免 None 触发 OpenCV 断言
+        if corners is not None and ids is not None and len(ids) > 0:
+            cv2.aruco.drawDetectedCornersCharuco(frame, corners, ids)
         # 画出 3D 坐标轴 (长度 0.1m)
+        #检查是否为有效的位姿
         cv2.drawFrameAxes(frame, self.K, self.D, rvec, tvec, 0.1)
+        return frame
 
 # --- 使用示例 ---
-# estimator = HighPrecisionPoseEstimator()
-# while True:
-#     img = cap.read()
-#     r, t = estimator.on_image(img)
+def main():
+    cap = cv2.VideoCapture(0)
+    estimator = HighPrecisionPoseEstimator()
+    while True:
+        _,img= cap.read()
+        if _ is False:
+            continue
+        rvec, tvec = estimator.on_image(img)
+        # on_image 内部已完成绘制，这里直接显示
+        cv2.imshow("Pose Estimation", img)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+    cap.release()
+    cv2.destroyAllWindows()
+if __name__ == "__main__":
+    main()   

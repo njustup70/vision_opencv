@@ -57,7 +57,7 @@ class ArucoPnpSerialNode(Node):
         rv = np.array(rvec, dtype=np.float64).reshape(3)
         tv = np.array(tvec, dtype=np.float64).reshape(3)
         # 发串口
-        
+
         # self._serial.write(payload.encode("ascii"))
 
 
