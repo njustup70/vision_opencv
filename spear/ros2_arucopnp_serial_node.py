@@ -21,7 +21,7 @@ from myserial import AsyncSerial_t
 
 
 # ---- 固定参数（按你的现场直接改这里） ----
-IMAGE_TOPIC = "/hik_camera/image_raw"
+IMAGE_TOPIC = "/hik_camera/image"
 DRAW_RESULT_TOPIC = "/arucopnp/draw_result"
 SERIAL_PORT = "/dev/serial_qh"
 SERIAL_BAUD = 230400
@@ -36,7 +36,7 @@ class ArucoPnpSerialNode(Node):
 
         self._draw_pub = self.create_publisher(Image, DRAW_RESULT_TOPIC, qos_profile_sensor_data)
         self._img_sub = self.create_subscription(Image, IMAGE_TOPIC, self._on_image, qos_profile_sensor_data)
-        self._serial = AsyncSerial_t(SERIAL_PORT, SERIAL_BAUD)
+        # self._serial = AsyncSerial_t(SERIAL_PORT, SERIAL_BAUD)
 
         self.get_logger().info(f"image_topic={IMAGE_TOPIC}")
         self.get_logger().info(f"draw_result_topic={DRAW_RESULT_TOPIC}")

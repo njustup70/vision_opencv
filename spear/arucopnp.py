@@ -11,20 +11,24 @@ class HighPrecisionPoseEstimator:
         assert cv_major > 4 or (cv_major == 4 and cv_minor >= 10), \
             f"检测到 OpenCV 版本为 {cv2.__version__}，本解算器要求版本 >= 4.10.0 以支持新的 ArucoDetector 接口。"
         # 1. 配置字典和板子 (请根据你的物理板子实际尺寸修改)
-        self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_100)
+        self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
         # 参数: (列数, 行数, 棋盘格方块边长, 标记边长, 字典)
         # 单位建议用米(m)，例如 0.04 表示 4cm
-        self.board = cv2.aruco.CharucoBoard((5, 5), 0.1, 0.07, self.dictionary)
+        self.board = cv2.aruco.CharucoBoard((5, 5), 0.01, 0.007, self.dictionary)
         
         # 2. 配置高精度检测参数
         self.detector_params = cv2.aruco.DetectorParameters()
         # 核心：使用 AprilTag 算法进行亚像素精修，这是目前最稳的方法
         self.detector_params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_APRILTAG
-        
+        # 搜索窗口：如果你的 Marker 在图里很大，用 10-20；如果很小，建议保持默认 5
+        self.detector_params.cornerRefinementWinSize = 4 
+        self.detector_params.cornerRefinementMaxIterations = 50
+        self.detector_params.cornerRefinementMinAccuracy = 0.02
         # 3. 初始化检测器
         self.charuco_detector = cv2.aruco.CharucoDetector(
             self.board, 
-            detectorParams=self.detector_params
+            detectorParams=self.detector_params,
+            # charucoParams=charuco_params,  # 确保这个参数被传入
         )
 
         if K is not None:
@@ -48,7 +52,8 @@ class HighPrecisionPoseEstimator:
         # 执行检测：得到精修后的棋盘格角点
         # charuco_corners: 2D 坐标, charuco_ids: 角点 ID
         c_corners, c_ids, m_corners, m_ids = self.charuco_detector.detectBoard(frame)
-
+        print('{m_ids} markers and {c_ids} charuco corners detected.'.format(m_ids=0 if m_ids is None else len(m_ids), c_ids=0 if c_ids is None else len(c_ids)))
+        best_rvec, best_tvec = None, None
         # 必须至少有 4 个点才能进行 PnP
         if c_ids is not None and len(c_ids) >= 4:
             # 获取对应的 3D 物理坐标
@@ -65,13 +70,10 @@ class HighPrecisionPoseEstimator:
             # 选择最佳解逻辑
             if retval > 0:
                 best_rvec, best_tvec = self._select_best_pose(rvecs, tvecs)
-                
-                # 绘制结果预览
-                self._draw_result(frame, c_corners, c_ids, best_rvec, best_tvec)
-                
-                return best_rvec, best_tvec
 
-        return None, None
+        # 绘制结果预览：有什么数据就画什么数据
+        self._draw_result(frame, c_corners, c_ids, m_corners, m_ids, best_rvec, best_tvec)
+        return best_rvec, best_tvec
 
     def _select_best_pose(self, rvecs, tvecs):
         """多解选择逻辑：优先选误差小的，结合上一帧平滑"""
@@ -92,16 +94,33 @@ class HighPrecisionPoseEstimator:
         self.last_tvec = tvecs[idx]
         return rvecs[idx], tvecs[idx]
 
-    def _draw_result(self, frame, corners, ids, rvec, tvec):
+    def _draw_result(self, frame, corners, ids, m_corners, m_ids, rvec, tvec):
         # 检查是否有有效的位姿
-        if rvec is None or tvec is None:
-            return frame
+        # marker 有效时画出来
+        if m_corners is not None and m_ids is not None and len(m_ids) > 0:
+            cv2.aruco.drawDetectedMarkers(frame, m_corners, None)
         # 角点有效时再画，避免 None 触发 OpenCV 断言
         if corners is not None and ids is not None and len(ids) > 0:
-            cv2.aruco.drawDetectedCornersCharuco(frame, corners, ids)
-        # 画出 3D 坐标轴 (长度 0.1m)
-        #检查是否为有效的位姿
-        cv2.drawFrameAxes(frame, self.K, self.D, rvec, tvec, 0.1)
+            cv2.aruco.drawDetectedCornersCharuco(frame, corners, None)
+
+        # 有位姿才画 3D 坐标轴
+        if rvec is not None and tvec is not None:
+            cv2.drawFrameAxes(frame, self.K, self.D, rvec, tvec, 0.1)
+
+        # 有什么数据标什么数据
+        lines = []
+        if m_ids is not None:
+            lines.append(f"markers: {len(m_ids)}")
+        if ids is not None:
+            lines.append(f"charuco: {len(ids)}")
+        if rvec is not None:
+            r = np.asarray(rvec).reshape(-1)
+            if r.size >= 3:
+                lines.append(f"rvec: [{r[0]:.3f}, {r[1]:.3f}, {r[2]:.3f}]")
+        if tvec is not None:
+            t = np.asarray(tvec).reshape(-1)
+            if t.size >= 3:
+                lines.append(f"tvec(m): [{t[0]:.3f}, {t[1]:.3f}, {t[2]:.3f}]")
         return frame
 
 # --- 使用示例 ---

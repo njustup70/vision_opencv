@@ -25,7 +25,8 @@ class AsyncSerial_t:
         self._wait_time = 0.01
         self._raw_data = b''
         self._connect_lock = asyncio.Lock()
-        self._loop:asyncio.AbstractEventLoop
+        self._loop:asyncio.AbstractEventLoop 
+        self._loop = asyncio.new_event_loop()
         self._thread=None
         self.last_len=0
         self.data_queue = asyncio.Queue()
