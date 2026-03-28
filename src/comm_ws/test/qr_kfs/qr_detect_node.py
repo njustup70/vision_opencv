@@ -41,10 +41,8 @@ class QRDetectNode(Node):
             # R2机器人：摄像头+识别模式
             self.get_logger().info('启动R2机器人（摄像头+识别模式）')
             
-            # 订阅开始start_qr_detection话题
-            self.create_subscription(String, 'start_qr_detection', self.start_detection_callback, 10)
-            # 订阅结束stop_qr_detection话题
-            self.create_subscription(String, 'stop_qr_detection', self.stop_detection_callback, 10)
+            # 订阅统一指令话题
+            self.create_subscription(String, '/update_exec_req', self.exec_req_callback, 10)
             
             # 发布识别结果
             self.result_publisher = self.create_publisher(String, 'qr_detection_result', 10)
@@ -122,19 +120,31 @@ class QRDetectNode(Node):
         
         cv2.destroyAllWindows()
     
-    def start_detection_callback(self, msg):
-        """R2：收到触发信号后，创建摄像头订阅"""
-        if self.camera_sub is None:
-            self.get_logger().info('收到启动命令，开始订阅摄像头图像')
-            # 创建摄像头订阅并保存对象
-            self.camera_sub = self.create_subscription(
-                Image, 
-                'camera/image_raw', 
-                self.image_callback, 
-                100
-            )
+    def exec_req_callback(self, msg):
+        """R2: 处理 /update_exec_req 指令"""
+        cmd = msg.data.strip()
+        if cmd == "qr_recog":
+            self.last_detected_data = None
+            if self.camera_sub is None:
+                self.get_logger().info('收到识别启动指令，开始订阅摄像头图像')
+                self.camera_sub = self.create_subscription(
+                    Image, 
+                    'camera/image_raw', 
+                    self.image_callback, 
+                    100
+                )
+            else:
+                self.get_logger().info('识别已启动，忽略重复指令')
+        elif cmd == "qr_recog_off":
+            self.last_detected_data = None
+            if self.camera_sub is not None:
+                self.get_logger().info('收到识别停止指令，停止订阅摄像头图像')
+                self.destroy_subscription(self.camera_sub)
+                self.camera_sub = None
+            else:
+                self.get_logger().info('识别已停止，忽略重复指令')
         else:
-            self.get_logger().info('摄像头订阅已存在，忽略重复启动')
+            self.get_logger().warn(f'未知指令: {cmd}')
 
     def image_callback(self, msg):
         """R2: 处理摄像头图像进行二维码识别"""
@@ -183,15 +193,6 @@ class QRDetectNode(Node):
             
         except Exception as e:
             self.get_logger().warn(f'图像处理错误: {str(e)[:50]}')
-    
-    def stop_detection_callback(self, msg):
-        """收到结束信号后，销毁摄像头订阅"""
-        if self.camera_sub is not None:
-            self.get_logger().info('收到停止命令，停止订阅摄像头图像')
-            self.destroy_subscription(self.camera_sub)
-            self.camera_sub = None
-        else:
-            self.get_logger().info('摄像头订阅已不存在，忽略重复停止')
 
     def destroy_node(self):
         """清理资源"""

@@ -80,11 +80,11 @@ class SmallBoardPoseNode(Node):
         self.declare_parameter("publish_offsets", True)
 
         # 控制话题：可选要求先收到 start_command_value 才开始算
-        self.declare_parameter("require_start_command", False)
-        self.declare_parameter("command_topic", "~/command")
-        self.declare_parameter("start_command_value", "spear")
+        self.declare_parameter("require_start_command", True)
+        self.declare_parameter("command_topic", "/update_exec_req")
+        self.declare_parameter("start_command_value", "spear_build")
         self.declare_parameter("stop_command_value", "stop")
-        self.declare_parameter("offset_topic", "~/offset_mm")
+        self.declare_parameter("offset_topic", "/small_board_pose/offset_mm")
 
         # 可视化开关（默认开启）
         self.declare_parameter("show_opencv_window", True)
@@ -257,7 +257,7 @@ class SmallBoardPoseNode(Node):
         self._err_max_pub = self.create_publisher(Float64, "~/reproj_error_max_px", 10)
         self._confidence_pub = self.create_publisher(Float32, "~/confidence", 10)
         self._method_pub = self.create_publisher(String, "~/method", 10)
-        offset_topic = str(self.get_parameter("offset_topic").value).strip() or "~/offset_mm"
+        offset_topic = str(self.get_parameter("offset_topic").value).strip() or "/small_board_pose/offset_mm"
         self._offset_pub = self.create_publisher(Float32MultiArray, offset_topic, 10)
 
         command_topic = str(self.get_parameter("command_topic").value).strip()
@@ -412,9 +412,10 @@ class SmallBoardPoseNode(Node):
                 self._confidence_pub.publish(Float32(data=float(est.confidence)))
                 self._method_pub.publish(String(data=f"{est.used}:{est.method}"))
                 offsets_mm = self._tvec_to_offsets_mm(est.tvec)
-                if bool(self.get_parameter("publish_offsets").value) and offsets_mm is not None:
+                if offsets_mm is not None:
                     left_mm, up_mm, _ = offsets_mm
-                    self._offset_pub.publish(Float32MultiArray(data=[left_mm, up_mm]))
+                    if bool(self.get_parameter("publish_offsets").value):
+                        self._offset_pub.publish(Float32MultiArray(data=[left_mm, up_mm]))
 
         if not bool(self.get_parameter("publish_debug_image").value):
             return
