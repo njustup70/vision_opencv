@@ -89,13 +89,13 @@ class HighPrecisionPoseEstimator:
             # 与 spear_vision 对齐：优先 SOLVEPNP_IPPE，失败回退 SOLVEPNP_ITERATIVE
             assert isinstance(img_points, np.ndarray) and isinstance(obj_points, np.ndarray), "输入点必须是 numpy 数组"
             retval, rvecs, tvecs = 0, None, None
-            try:
-                retval, rvecs, tvecs, _ = cv2.solvePnPGeneric(
-                    obj_points, img_points, self.K, self.D,
-                    flags=cv2.SOLVEPNP_IPPE
-                )
-            except cv2.error:
-                retval = 0
+            # try:
+            #     retval, rvecs, tvecs, _ = cv2.solvePnPGeneric(
+            #         obj_points, img_points, self.K, self.D,
+            #         flags=cv2.SOLVEPNP_IPPE
+            #     )
+            # except cv2.error:
+            #     retval = 0
 
             if retval <= 0:
                 try:
