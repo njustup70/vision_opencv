@@ -39,7 +39,7 @@ class ArucoPnpSerialNode(Node):
         self._bridge = CvBridge()
 
         self._draw_pub = self.create_publisher(Image, DRAW_RESULT_TOPIC, qos_profile_sensor_data)
-        self._img_sub = self.create_subscription(Image, IMAGE_TOPIC, self._on_image, qos_profile_sensor_data)
+        self._img_sub = self.create_subscription(Image, IMAGE_TOPIC, self._on_image, 1)
         self._serial = AsyncSerial_t(SERIAL_PORT, SERIAL_BAUD)
 
     @staticmethod
