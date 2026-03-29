@@ -19,10 +19,10 @@ class HighPrecisionPoseEstimator:
         # 2. 配置高精度检测参数
         self.detector_params = cv2.aruco.DetectorParameters()
         # 核心：使用 AprilTag 算法进行亚像素精修，这是目前最稳的方法
-        self.detector_params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_APRILTAG
+        self.detector_params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
         # 搜索窗口：如果你的 Marker 在图里很大，用 10-20；如果很小，建议保持默认 5
         self.detector_params.cornerRefinementWinSize = 4 
-        self.detector_params.cornerRefinementMaxIterations = 50
+        self.detector_params.cornerRefinementMaxIterations = 20
         self.detector_params.cornerRefinementMinAccuracy = 0.02
         # 3. 初始化检测器
         self.charuco_detector = cv2.aruco.CharucoDetector(
