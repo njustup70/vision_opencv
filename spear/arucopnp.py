@@ -46,32 +46,53 @@ class HighPrecisionPoseEstimator:
 
     def on_image(self, frame):
         """数据回调函数"""
-        if frame is None:
-            return None, None
+        if frame is None: return None, None
 
-        # 执行检测：得到精修后的棋盘格角点
-        # charuco_corners: 2D 坐标, charuco_ids: 角点 ID
+        # 1. 执行检测
         c_corners, c_ids, m_corners, m_ids = self.charuco_detector.detectBoard(frame)
-        print('{m_ids} markers and {c_ids} charuco corners detected.'.format(m_ids=0 if m_ids is None else len(m_ids), c_ids=0 if c_ids is None else len(c_ids)))
+        
+        obj_points, img_points = None, None
         best_rvec, best_tvec = None, None
-        # 必须至少有 4 个点才能进行 PnP
-        if c_ids is not None and len(c_ids) >= 4:
-            # 获取对应的 3D 物理坐标
-            obj_points = self.board.getChessboardCorners()[c_ids.ravel()]
-            img_points = c_corners
 
-            # 使用 solvePnPGeneric 获取所有可能的解（处理翻转歧义性）
-            # 对于平面物体，SOLVEPNP_IPPE 是目前数学上最严谨的解法
+        # 2. 策略 A：优先使用 Charuco 角点（高精度）
+        if c_ids is not None and len(c_ids) >= 4:
+            # 这里的 getChessboardCorners 会根据 c_ids 自动匹配 3D 坐标
+            obj_points = self.board.matchImagePoints(c_corners, c_ids)
+            img_points = c_corners
+        # 3. 策略 B：退而求其次，使用 ArUco 标记角点（防止 c_ids 丢失）
+        elif m_ids is not None and len(m_ids) >= 1:
+            obj_list = []
+            img_list = []
+
+            # 获取该 Board 中所有 Marker 的 ID 列表及其对应的 3D 坐标
+            board_ids = self.board.getIds()
+            # getObjPoints 返回的是所有 Marker 的 4 个角坐标，形状为 (N, 4, 3)
+            board_obj_points = self.board.getObjPoints()
+
+            for i, m_id in enumerate(m_ids.flatten()):
+                # 寻找当前检测到的 ID 在 Board 定义中的索引
+                idx = np.where(board_ids == m_id)[0]
+                if len(idx) > 0:
+                    # 提取该索引对应的 4 个 3D 点
+                    obj_list.append(board_obj_points[idx[0]])
+                    # 提取对应的 2D 检测点，并确保形状为 (4, 2)
+                    img_list.append(m_corners[i].reshape(4, 2))
+
+            else:
+                # 如果一个匹配的都没有，跳过
+                return None, None
+        # 4. 执行 PnP 解算
+        if obj_points is not None and len(obj_points) >= 4:
+            # SOLVEPNP_IPPE 对平面标定板非常快且稳
+            assert isinstance(img_points, np.ndarray) and isinstance(obj_points, np.ndarray), "输入点必须是 numpy 数组"
             retval, rvecs, tvecs, errors = cv2.solvePnPGeneric(
                 obj_points, img_points, self.K, self.D, 
                 flags=cv2.SOLVEPNP_IPPE
             )
-
-            # 选择最佳解逻辑
             if retval > 0:
                 best_rvec, best_tvec = self._select_best_pose(rvecs, tvecs)
-
-        # 绘制结果预览：有什么数据就画什么数据
+                # print(f"Pose estimated using {method_name}")
+        # 5. 绘制与返回
         self._draw_result(frame, c_corners, c_ids, m_corners, m_ids, best_rvec, best_tvec)
         return best_rvec, best_tvec
 
