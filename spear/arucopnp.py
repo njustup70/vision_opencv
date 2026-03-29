@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 class HighPrecisionPoseEstimator:
-    def __init__(self,K=None):
+    def __init__(self,K=None,D=None):
         # OpenCV 4.10.0 是 Aruco 模块 API 彻底标准化的重要节点
         cv_version = cv2.__version__.split('.')
         cv_major = int(cv_version[0])
@@ -38,7 +38,10 @@ class HighPrecisionPoseEstimator:
             self.K = np.array([[800.0, 0, 320.0], 
                             [0, 800.0, 240.0], 
                             [0, 0, 1.0]], dtype=np.float32)
-        self.D = np.zeros((5, 1), dtype=np.float32) # 畸变系数
+        if D is not None:
+            self.D = D
+        else:
+            self.D = np.zeros((5, 1), dtype=np.float32) # 畸变系数
 
         # 5. 帧间平滑记录（用于防止跳变）
         self.last_rvec = None

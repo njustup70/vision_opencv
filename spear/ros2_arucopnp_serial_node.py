@@ -30,8 +30,12 @@ SERIAL_BAUD = 230400
 class ArucoPnpSerialNode(Node):
     def __init__(self) -> None:
         super().__init__("arucopnp_serial_node")
-
-        self._estimator = HighPrecisionPoseEstimator()
+        K=np.array(
+          [ [1322.8397832601186, 0.0, 623.2118921253351],
+            [0.0, 1338.418629358359, 509.76668739080276],
+            [0.0, 0.0, 1.0]]     )
+        D=np.array([-0.131611456394353, 0.9770122703554055, -0.0037105334423302764, -0.0033209523486226952, -2.6406900561614206])
+        self._estimator = HighPrecisionPoseEstimator(K=K,D=D)
         self._bridge = CvBridge()
 
         self._draw_pub = self.create_publisher(Image, DRAW_RESULT_TOPIC, qos_profile_sensor_data)
@@ -54,8 +58,7 @@ class ArucoPnpSerialNode(Node):
         if rvec is None or tvec is None:
             return
 
-        rv = np.array(rvec, dtype=np.float64).reshape(3)
-        tv = np.array(tvec, dtype=np.float64).reshape(3)
+        print(f"rvec: {rvec}, tvec: {tvec}")
         # 发串口
 
         # self._serial.write(payload.encode("ascii"))
