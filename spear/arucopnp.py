@@ -86,12 +86,26 @@ class HighPrecisionPoseEstimator:
                 return None, None
         # 4. 执行 PnP 解算
         if obj_points is not None and len(obj_points) >= 4:
-            # SOLVEPNP_IPPE 对平面标定板非常快且稳
+            # 与 spear_vision 对齐：优先 SOLVEPNP_IPPE，失败回退 SOLVEPNP_ITERATIVE
             assert isinstance(img_points, np.ndarray) and isinstance(obj_points, np.ndarray), "输入点必须是 numpy 数组"
-            retval, rvecs, tvecs, errors = cv2.solvePnPGeneric(
-                obj_points, img_points, self.K, self.D, 
-                flags=cv2.SOLVEPNP_SQPNP
-            )
+            retval, rvecs, tvecs = 0, None, None
+            try:
+                retval, rvecs, tvecs, _ = cv2.solvePnPGeneric(
+                    obj_points, img_points, self.K, self.D,
+                    flags=cv2.SOLVEPNP_IPPE
+                )
+            except cv2.error:
+                retval = 0
+
+            if retval <= 0:
+                try:
+                    retval, rvecs, tvecs, _ = cv2.solvePnPGeneric(
+                        obj_points, img_points, self.K, self.D,
+                        flags=cv2.SOLVEPNP_ITERATIVE
+                    )
+                except cv2.error:
+                    retval = 0
+
             if retval > 0:
                 best_rvec, best_tvec = self._select_best_pose(rvecs, tvecs)
                 # print(f"Pose estimated using {method_name}")

@@ -54,7 +54,7 @@ class ArucoPnpSerialNode(Node):
         # left_mm = -x * 1000, up_mm = -y * 1000
         left_mm = -x_m * 1000.0
         up_mm = -y_m * 1000.0
-
+        print(f"left_mm: {left_mm:.1f}, up_mm: {up_mm:.1f}")
         payload = struct.pack("<ff", left_mm, up_mm)
         return bytes([0xFA, 0xB1]) + payload
 
@@ -72,7 +72,7 @@ class ArucoPnpSerialNode(Node):
 
         frame = self._to_spear_vision_frame(tvec)
         self._serial.write(frame)
-        self.get_logger().info(f"TX {frame.hex()}")
+        # self.get_logger().info(f"TX {frame.hex()}")
 
 
 def main(args=None) -> None:
