@@ -90,7 +90,7 @@ class HighPrecisionPoseEstimator:
             assert isinstance(img_points, np.ndarray) and isinstance(obj_points, np.ndarray), "输入点必须是 numpy 数组"
             retval, rvecs, tvecs, errors = cv2.solvePnPGeneric(
                 obj_points, img_points, self.K, self.D, 
-                flags=cv2.SOLVEPNP_IPPE
+                flags=cv2.SOLVEPNP_SQPNP
             )
             if retval > 0:
                 best_rvec, best_tvec = self._select_best_pose(rvecs, tvecs)

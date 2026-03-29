@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import struct
 import sys
 
 import numpy as np
@@ -26,7 +27,6 @@ DRAW_RESULT_TOPIC = "/arucopnp/draw_result"
 SERIAL_PORT = "/dev/serial_qh"
 SERIAL_BAUD = 230400
 
-
 class ArucoPnpSerialNode(Node):
     def __init__(self) -> None:
         super().__init__("arucopnp_serial_node")
@@ -40,11 +40,23 @@ class ArucoPnpSerialNode(Node):
 
         self._draw_pub = self.create_publisher(Image, DRAW_RESULT_TOPIC, qos_profile_sensor_data)
         self._img_sub = self.create_subscription(Image, IMAGE_TOPIC, self._on_image, qos_profile_sensor_data)
-        # self._serial = AsyncSerial_t(SERIAL_PORT, SERIAL_BAUD)
+        self._serial = AsyncSerial_t(SERIAL_PORT, SERIAL_BAUD)
 
-        self.get_logger().info(f"image_topic={IMAGE_TOPIC}")
-        self.get_logger().info(f"draw_result_topic={DRAW_RESULT_TOPIC}")
-        self.get_logger().info(f"serial={SERIAL_PORT} @ {SERIAL_BAUD}")
+    @staticmethod
+    def _to_spear_vision_frame(tvec: np.ndarray) -> bytes:
+        """Convert solvePnP tvec(m) to spear_vision UART frame."""
+        t = np.asarray(tvec, dtype=np.float64).reshape(-1)
+        x_m, y_m = float(t[0]), float(t[1])
+        #检测是否为Nan如果是Nan则返回全0数据
+        if np.isnan(x_m) or np.isnan(y_m):
+            x_m, y_m = 0.0, 0.0
+        # Follow spear_vision convention:
+        # left_mm = -x * 1000, up_mm = -y * 1000
+        left_mm = -x_m * 1000.0
+        up_mm = -y_m * 1000.0
+
+        payload = struct.pack("<ff", left_mm, up_mm)
+        return bytes([0xFA, 0xB1]) + payload
 
     def _on_image(self, msg: Image) -> None:
         frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
@@ -58,10 +70,9 @@ class ArucoPnpSerialNode(Node):
         if rvec is None or tvec is None:
             return
 
-        print(f"rvec: {rvec}, tvec: {tvec}")
-        # 发串口
-
-        # self._serial.write(payload.encode("ascii"))
+        frame = self._to_spear_vision_frame(tvec)
+        self._serial.write(frame)
+        self.get_logger().info(f"TX {frame.hex()}")
 
 
 def main(args=None) -> None:
