@@ -60,8 +60,8 @@ class HighPrecisionPoseEstimator:
         # 2. 策略 A：优先使用 Charuco 角点（高精度）
         if c_ids is not None and len(c_ids) >= 4:
             # 这里的 getChessboardCorners 会根据 c_ids 自动匹配 3D 坐标
-            obj_points = self.board.matchImagePoints(c_corners, c_ids)
-            img_points = c_corners
+            obj_points,img_points = self.board.matchImagePoints(c_corners, c_ids)
+            #  = c_corners
         # 3. 策略 B：退而求其次，使用 ArUco 标记角点（防止 c_ids 丢失）
         elif m_ids is not None and len(m_ids) >= 1:
             obj_list = []
