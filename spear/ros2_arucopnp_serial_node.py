@@ -25,7 +25,7 @@ from myserial import AsyncSerial_t
 IMAGE_TOPIC = "/hik_camera/image"
 DRAW_RESULT_TOPIC = "/arucopnp/draw_result"
 SERIAL_PORT = "/dev/serial_qh"
-SERIAL_BAUD = 230400
+SERIAL_BAUD = 115200
 
 class ArucoPnpSerialNode(Node):
     def __init__(self) -> None:
