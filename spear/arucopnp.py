@@ -80,7 +80,8 @@ class HighPrecisionPoseEstimator:
                     obj_list.append(board_obj_points[idx[0]])
                     # 提取对应的 2D 检测点，并确保形状为 (4, 2)
                     img_list.append(m_corners[i].reshape(4, 2))
-
+            obj_points = np.concatenate(obj_list, axis=0) if obj_list else None
+            img_points = np.concatenate(img_list, axis=0) if img_list else None
         else:
             # 如果一个匹配的都没有，跳过
             return None, None
