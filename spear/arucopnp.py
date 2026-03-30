@@ -11,7 +11,7 @@ class HighPrecisionPoseEstimator:
         assert cv_major > 4 or (cv_major == 4 and cv_minor >= 10), \
             f"检测到 OpenCV 版本为 {cv2.__version__}，本解算器要求版本 >= 4.10.0 以支持新的 ArucoDetector 接口。"
         # 1. 配置字典和板子 (请根据你的物理板子实际尺寸修改)
-        self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
+        self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_100)
         # 参数: (列数, 行数, 棋盘格方块边长, 标记边长, 字典)
         # 单位建议用米(m)，例如 0.04 表示 4cm
         self.board = cv2.aruco.CharucoBoard((3, 3), 0.025, 0.018, self.dictionary)
@@ -81,9 +81,9 @@ class HighPrecisionPoseEstimator:
                     # 提取对应的 2D 检测点，并确保形状为 (4, 2)
                     img_list.append(m_corners[i].reshape(4, 2))
 
-            else:
-                # 如果一个匹配的都没有，跳过
-                return None, None
+        else:
+            # 如果一个匹配的都没有，跳过
+            return None, None
         # 4. 执行 PnP 解算
         if obj_points is not None and len(obj_points) >= 4:
             # 与 spear_vision 对齐：优先 SOLVEPNP_IPPE，失败回退 SOLVEPNP_ITERATIVE
