@@ -14,13 +14,13 @@ for box in results[0].boxes:
     x1,y1,x2,y2 = map(int, box.xyxy[0])
     cls = int(box.cls[0])
     
-    if cls == 0:
+    if cls == 15:
         shelf = (x1,y1,x2,y2)
         cv2.rectangle(img, (x1,y1), (x2,y2), (0,255,255), 3)
-    elif cls == 1:
+    elif cls == 16:
         kfs.append(('红', (x1,y1,x2,y2)))
         cv2.rectangle(img, (x1,y1), (x2,y2), (0,0,255), 2)
-    elif cls == 2:
+    elif cls == 17:
         kfs.append(('蓝', (x1,y1,x2,y2)))
         cv2.rectangle(img, (x1,y1), (x2,y2), (255,0,0), 2)
 
