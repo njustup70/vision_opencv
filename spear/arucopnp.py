@@ -14,7 +14,7 @@ class HighPrecisionPoseEstimator:
         self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_100)
         # 参数: (列数, 行数, 棋盘格方块边长, 标记边长, 字典)
         # 单位建议用米(m)，例如 0.04 表示 4cm
-        self.board = cv2.aruco.CharucoBoard((3, 3), 0.025, 0.018, self.dictionary)
+        self.board = cv2.aruco.CharucoBoard((3, 3), 0.03, 0.022, self.dictionary)
         
         # 2. 配置高精度检测参数
         self.detector_params = cv2.aruco.DetectorParameters()
@@ -171,6 +171,7 @@ def main():
         if _ is False:
             continue
         rvec, tvec = estimator.on_image(img)
+        # print(f"Estimated tvec: {tvec}")
         # on_image 内部已完成绘制，这里直接显示
         cv2.imshow("Pose Estimation", img)
         if cv2.waitKey(1) & 0xFF == ord('q'):
