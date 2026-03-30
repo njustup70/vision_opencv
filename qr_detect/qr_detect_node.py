@@ -1,5 +1,5 @@
+from __future__ import annotations
 import os
-import time
 import threading
 import cv2
 import rclpy
@@ -11,46 +11,52 @@ from cv_bridge import CvBridge
 from pyzbar.pyzbar import decode
 
 os.environ['QT_QPA_PLATFORM'] = 'xcb'
-from .qr_core import QRCoder
+
+try:
+    from .qr_core import QRCoder
+except ImportError:
+    from qr_core import QRCoder
+
+
+VALID_STATES = {"空", "R1", "R2", "假"}
+START_CMD = "qr_recog"
+STOP_CMD = "qr_recog_off"
+SCREEN = {'width': 2160, 'height': 1440, 'x': 2560, 'y': 0}
 
 class QRDetectNode(Node):
     def __init__(self):
         super().__init__('qr_detect_node')
-        
+
         self.declare_parameter('node_type', 'R2')  # R1: 二维码显示, R2: 摄像头+识别
         self.node_type = self.get_parameter('node_type').value
-        
+
         self.bridge = CvBridge()
         self.running = True
+        self.current_qr_img = None
+        self.displaying = False
+        self.camera_sub = None
+        self.last_detected_data = None
         
         if self.node_type == 'R1':
             # R1机器人：二维码显示模式
             self.get_logger().info('启动R1机器人（二维码显示模式）')
-            
+
             # 订阅code_display话题
             self.create_subscription(String, 'code_display', self.code_callback, 10)
-            
-            # 初始化二维码相关变量
-            self.current_qr_img = None
-            self.displaying = False
-            
+
             self.display_thread = threading.Thread(target=self.display_loop, daemon=True)
             self.display_thread.start()
-            
+
         elif self.node_type == 'R2':
             # R2机器人：摄像头+识别模式
             self.get_logger().info('启动R2机器人（摄像头+识别模式）')
-            
+
             # 订阅统一指令话题
             self.create_subscription(String, '/update_exec_req', self.exec_req_callback, 10)
-            
+
             # 发布识别结果
             self.result_publisher = self.create_publisher(String, 'qr_detection_result', 10)
-            
-            # 摄像头订阅初始为 None
-            self.camera_sub = None
-            self.last_detected_data = None
-            
+
         else:
             self.get_logger().error(f'未知的节点类型: {self.node_type}')
             raise ValueError(f'节点类型必须是 R1 或 R2，当前为: {self.node_type}')
@@ -64,13 +70,12 @@ class QRDetectNode(Node):
             if len(states_list) != 12:
                 self.get_logger().error(f'需要12个状态，收到 {len(states_list)} 个')
                 return
-            
-            valid_states = ["空", "R1", "R2", "假"]
+
             for state in states_list:
-                if state not in valid_states:
+                if state not in VALID_STATES:
                     self.get_logger().error(f'无效状态: {state}')
                     return
-            
+
             self.get_logger().info(f'生成二维码，状态: {states_list}')
             path, hex_data = QRCoder.encode(
                 states_list,
@@ -78,7 +83,7 @@ class QRDetectNode(Node):
                 dpi=220,
                 save_dir="./qr_codes"
             )
-            
+
             img = cv2.imread(path)
             if img is not None:
                 self.current_qr_img = img
@@ -86,56 +91,54 @@ class QRDetectNode(Node):
                 self.get_logger().info(f'二维码已生成: {hex_data}')
             else:
                 self.get_logger().error('无法加载二维码图片')
-                
+
         except Exception as e:
             self.get_logger().error(f'处理KFS状态时出错: {e}')
     
     def display_loop(self):
         """R1: 在便携屏上持续显示二维码"""
-        screen = {'width': 2160, 'height': 1440, 'x': 2560, 'y': 0}
         window_name = "QR Display - R1"
-        
+
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-        cv2.moveWindow(window_name, screen['x'], screen['y'])
+        cv2.moveWindow(window_name, SCREEN['x'], SCREEN['y'])
         cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-        
+
         while rclpy.ok() and self.running:
+            blank = np.full((SCREEN['height'], SCREEN['width'], 3), 255, dtype=np.uint8)
             if self.current_qr_img is not None and self.displaying:
                 qr_h, qr_w = self.current_qr_img.shape[:2]
-                x = max(0, (screen['width'] - qr_w) // 2)
-                y = max(0, (screen['height'] - qr_h) // 2)
-                
-                blank = np.ones((screen['height'], screen['width'], 3), dtype=np.uint8) * 255
-                blank[y:y+qr_h, x:x+qr_w] = self.current_qr_img
-                
+                x = max(0, (SCREEN['width'] - qr_w) // 2)
+                y = max(0, (SCREEN['height'] - qr_h) // 2)
+
+                blank[y:y + qr_h, x:x + qr_w] = self.current_qr_img
+
                 # 显示二维码
                 cv2.imshow(window_name, blank)
             else:
-                blank = np.ones((screen['height'], screen['width'], 3), dtype=np.uint8) * 255
                 cv2.imshow(window_name, blank)
-            
+
             if cv2.waitKey(30) & 0xFF == ord('q'):
                 self.running = False
                 break
-        
+
         cv2.destroyAllWindows()
     
     def exec_req_callback(self, msg):
         """R2: 处理 /update_exec_req 指令"""
         cmd = msg.data.strip()
-        if cmd == "qr_recog":
+        if cmd == START_CMD:
             self.last_detected_data = None
             if self.camera_sub is None:
                 self.get_logger().info('收到识别启动指令，开始订阅摄像头图像')
                 self.camera_sub = self.create_subscription(
-                    Image, 
-                    'camera/image_raw', 
-                    self.image_callback, 
+                    Image,
+                    'camera/image_raw',
+                    self.image_callback,
                     100
                 )
             else:
                 self.get_logger().info('识别已启动，忽略重复指令')
-        elif cmd == "qr_recog_off":
+        elif cmd == STOP_CMD:
             self.last_detected_data = None
             if self.camera_sub is not None:
                 self.get_logger().info('收到识别停止指令，停止订阅摄像头图像')
@@ -184,7 +187,7 @@ class QRDetectNode(Node):
                         if len(pts) == 4:
                             pts = [(pt.x, pt.y) for pt in pts]
                             for i in range(4):
-                                cv2.line(frame, pts[i], pts[(i+1)%4], (0, 255, 0), 2)
+                                cv2.line(frame, pts[i], pts[(i + 1) % 4], (0, 255, 0), 2)
             
             cv2.imshow('Camera View - R2', frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -202,15 +205,16 @@ class QRDetectNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    
+
     node = QRDetectNode()
-    
+
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
         node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
