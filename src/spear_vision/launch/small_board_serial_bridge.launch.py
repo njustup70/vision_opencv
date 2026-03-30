@@ -36,7 +36,7 @@ def generate_launch_description():
             DeclareLaunchArgument("command_topic", default_value="~/command"),
             DeclareLaunchArgument("start_command_value", default_value="spear"),
             DeclareLaunchArgument("publish_offsets", default_value="true"),
-            DeclareLaunchArgument("offset_topic", default_value="~/offset_mm"),
+            DeclareLaunchArgument("offset_topic", default_value="/small_board_pose/offset_mm"),
             # 串口参数
             DeclareLaunchArgument("port", default_value="/dev/serial_ch340"),
             DeclareLaunchArgument("baudrate", default_value="115200"),
