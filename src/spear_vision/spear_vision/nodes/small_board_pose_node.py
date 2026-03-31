@@ -79,8 +79,9 @@ class SmallBoardPoseNode(Node):
         self.declare_parameter("publish_pose", True)
         self.declare_parameter("publish_offsets", True)
 
-        # 控制话题：可选要求先收到 start_command_value 才开始算
-        self.declare_parameter("require_start_command", True)
+        # 控制话题：默认直启即开始算，便于兼容“相机+串口链路直接运行”的老用法；
+        # 若业务确实需要命令触发，可在 launch/CLI 里显式打开。
+        self.declare_parameter("require_start_command", False)
         self.declare_parameter("command_topic", "/update_exec_req")
         self.declare_parameter("start_command_value", "spear_build")
         self.declare_parameter("stop_command_value", "stop")
@@ -240,9 +241,24 @@ class SmallBoardPoseNode(Node):
         image_topic = self.get_parameter("image_topic").get_parameter_value().string_value
 
         camera_info_topic = self.get_parameter("camera_info_topic").get_parameter_value().string_value
-        derived_info = image_topic.rstrip("/") + "/camera_info"
-        if not camera_info_topic or camera_info_topic.strip() in ("/hik_camera/camera_info",):
+        camera_info_topic = str(camera_info_topic).strip()
+        # image_transport::CameraPublisher 的标准命名是：
+        # image topic 与 camera_info topic 处于同一命名空间，
+        # 例如 /hik_camera/image_raw -> /hik_camera/camera_info
+        image_topic_norm = str(image_topic).rstrip("/")
+        image_ns, sep, _ = image_topic_norm.rpartition("/")
+        if sep:
+            derived_info = (image_ns or "/") + "/camera_info"
+            if derived_info.startswith("//"):
+                derived_info = derived_info[1:]
+        else:
+            derived_info = "camera_info"
+        if not camera_info_topic:
             camera_info_topic = derived_info
+        elif camera_info_topic != derived_info:
+            self.get_logger().info(
+                f"Using explicit camera_info_topic: {camera_info_topic} (derived default would be {derived_info})"
+            )
 
         self._sub_img = self.create_subscription(Image, image_topic, self._on_image, qos_profile_sensor_data)
         self._sub_info = self.create_subscription(

@@ -38,7 +38,7 @@ def generate_launch_description():
             DeclareLaunchArgument("publish_offsets", default_value="true"),
             DeclareLaunchArgument("offset_topic", default_value="/small_board_pose/offset_mm"),
             # 串口参数
-            DeclareLaunchArgument("port", default_value="/dev/serial_ch340"),
+            DeclareLaunchArgument("port", default_value="/dev/serial_qh"),
             DeclareLaunchArgument("baudrate", default_value="115200"),
             DeclareLaunchArgument("out_first_frame", default_value="250"),  # 0xFA
             DeclareLaunchArgument("out_frame_id", default_value="177"),  # 0xB1

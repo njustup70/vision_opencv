@@ -32,7 +32,7 @@ def generate_launch_description():
             DeclareLaunchArgument("camera_calibration_yaml", default_value=default_cam),
             DeclareLaunchArgument("show_opencv_window", default_value="true"),
             DeclareLaunchArgument("opencv_window_name", default_value="small_board_view"),
-            DeclareLaunchArgument("require_start_command", default_value="true"),
+            DeclareLaunchArgument("require_start_command", default_value="false"),
             DeclareLaunchArgument("command_topic", default_value="/update_exec_req"),
             DeclareLaunchArgument("start_command_value", default_value="spear_build"),
             DeclareLaunchArgument("stop_command_value", default_value="stop"),

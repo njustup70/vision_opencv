@@ -34,7 +34,7 @@ class SmallBoardSerialBridgeNode(Node):
         super().__init__("small_board_serial_bridge")
 
         # --- 串口参数（与电控组对齐） ---
-        self.declare_parameter("port", "/dev/serial_ch340")
+        self.declare_parameter("port", "/dev/serial_qh")
         self.declare_parameter("baudrate", 115200)
         # 帧头 + 帧 ID
         self.declare_parameter("out_first_frame", 0xFA)
@@ -133,10 +133,10 @@ class SmallBoardSerialBridgeNode(Node):
         up_mm = -y * 1000.0
 
         #矛杆与charuco码原点的偏移量 
-        x_mgpianyi=0
+        x_mgpianyi=220.0
         y_mgpianyi=0
         #夹爪与摄像头中心的偏移量
-        x_jzpianyi=0
+        x_jzpianyi=193.37
         y_jzpianyi=0
         #摄像头与夹爪的角度偏移（横向与纵向）
         alpha=0
