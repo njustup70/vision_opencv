@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 class HighPrecisionPoseEstimator:
-    def __init__(self,K=None):
+    def __init__(self,K=None,D=None):
         # OpenCV 4.10.0 是 Aruco 模块 API 彻底标准化的重要节点
         cv_version = cv2.__version__.split('.')
         cv_major = int(cv_version[0])
@@ -11,18 +11,18 @@ class HighPrecisionPoseEstimator:
         assert cv_major > 4 or (cv_major == 4 and cv_minor >= 10), \
             f"检测到 OpenCV 版本为 {cv2.__version__}，本解算器要求版本 >= 4.10.0 以支持新的 ArucoDetector 接口。"
         # 1. 配置字典和板子 (请根据你的物理板子实际尺寸修改)
-        self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
+        self.dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_100)
         # 参数: (列数, 行数, 棋盘格方块边长, 标记边长, 字典)
         # 单位建议用米(m)，例如 0.04 表示 4cm
-        self.board = cv2.aruco.CharucoBoard((5, 5), 0.01, 0.007, self.dictionary)
+        self.board = cv2.aruco.CharucoBoard((3, 3), 0.03, 0.022, self.dictionary)
         
         # 2. 配置高精度检测参数
         self.detector_params = cv2.aruco.DetectorParameters()
         # 核心：使用 AprilTag 算法进行亚像素精修，这是目前最稳的方法
-        self.detector_params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_APRILTAG
+        self.detector_params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
         # 搜索窗口：如果你的 Marker 在图里很大，用 10-20；如果很小，建议保持默认 5
         self.detector_params.cornerRefinementWinSize = 4 
-        self.detector_params.cornerRefinementMaxIterations = 50
+        self.detector_params.cornerRefinementMaxIterations = 20
         self.detector_params.cornerRefinementMinAccuracy = 0.02
         # 3. 初始化检测器
         self.charuco_detector = cv2.aruco.CharucoDetector(
@@ -38,7 +38,10 @@ class HighPrecisionPoseEstimator:
             self.K = np.array([[800.0, 0, 320.0], 
                             [0, 800.0, 240.0], 
                             [0, 0, 1.0]], dtype=np.float32)
-        self.D = np.zeros((5, 1), dtype=np.float32) # 畸变系数
+        if D is not None:
+            self.D = D
+        else:
+            self.D = np.zeros((5, 1), dtype=np.float32) # 畸变系数
 
         # 5. 帧间平滑记录（用于防止跳变）
         self.last_rvec = None
@@ -46,32 +49,68 @@ class HighPrecisionPoseEstimator:
 
     def on_image(self, frame):
         """数据回调函数"""
-        if frame is None:
-            return None, None
+        if frame is None: return None, None
 
-        # 执行检测：得到精修后的棋盘格角点
-        # charuco_corners: 2D 坐标, charuco_ids: 角点 ID
+        # 1. 执行检测
         c_corners, c_ids, m_corners, m_ids = self.charuco_detector.detectBoard(frame)
-        print('{m_ids} markers and {c_ids} charuco corners detected.'.format(m_ids=0 if m_ids is None else len(m_ids), c_ids=0 if c_ids is None else len(c_ids)))
+        
+        obj_points, img_points = None, None
         best_rvec, best_tvec = None, None
-        # 必须至少有 4 个点才能进行 PnP
+
+        # 2. 策略 A：优先使用 Charuco 角点（高精度）
         if c_ids is not None and len(c_ids) >= 4:
-            # 获取对应的 3D 物理坐标
-            obj_points = self.board.getChessboardCorners()[c_ids.ravel()]
-            img_points = c_corners
+            # 这里的 getChessboardCorners 会根据 c_ids 自动匹配 3D 坐标
+            obj_points,img_points = self.board.matchImagePoints(c_corners, c_ids)
+            #  = c_corners
+        # 3. 策略 B：退而求其次，使用 ArUco 标记角点（防止 c_ids 丢失）
+        elif m_ids is not None and len(m_ids) >= 1:
+            obj_list = []
+            img_list = []
 
-            # 使用 solvePnPGeneric 获取所有可能的解（处理翻转歧义性）
-            # 对于平面物体，SOLVEPNP_IPPE 是目前数学上最严谨的解法
-            retval, rvecs, tvecs, errors = cv2.solvePnPGeneric(
-                obj_points, img_points, self.K, self.D, 
-                flags=cv2.SOLVEPNP_IPPE
-            )
+            # 获取该 Board 中所有 Marker 的 ID 列表及其对应的 3D 坐标
+            board_ids = self.board.getIds()
+            # getObjPoints 返回的是所有 Marker 的 4 个角坐标，形状为 (N, 4, 3)
+            board_obj_points = self.board.getObjPoints()
 
-            # 选择最佳解逻辑
+            for i, m_id in enumerate(m_ids.flatten()):
+                # 寻找当前检测到的 ID 在 Board 定义中的索引
+                idx = np.where(board_ids == m_id)[0]
+                if len(idx) > 0:
+                    # 提取该索引对应的 4 个 3D 点
+                    obj_list.append(board_obj_points[idx[0]])
+                    # 提取对应的 2D 检测点，并确保形状为 (4, 2)
+                    img_list.append(m_corners[i].reshape(4, 2))
+            obj_points = np.concatenate(obj_list, axis=0) if obj_list else None
+            img_points = np.concatenate(img_list, axis=0) if img_list else None
+        else:
+            # 如果一个匹配的都没有，跳过
+            return None, None
+        # 4. 执行 PnP 解算
+        if obj_points is not None and len(obj_points) >= 4:
+            # 与 spear_vision 对齐：优先 SOLVEPNP_IPPE，失败回退 SOLVEPNP_ITERATIVE
+            assert isinstance(img_points, np.ndarray) and isinstance(obj_points, np.ndarray), "输入点必须是 numpy 数组"
+            retval, rvecs, tvecs = 0, None, None
+            # try:
+            #     retval, rvecs, tvecs, _ = cv2.solvePnPGeneric(
+            #         obj_points, img_points, self.K, self.D,
+            #         flags=cv2.SOLVEPNP_IPPE
+            #     )
+            # except cv2.error:
+            #     retval = 0
+
+            if retval <= 0:
+                try:
+                    retval, rvecs, tvecs, _ = cv2.solvePnPGeneric(
+                        obj_points, img_points, self.K, self.D,
+                        flags=cv2.SOLVEPNP_ITERATIVE
+                    )
+                except cv2.error:
+                    retval = 0
+
             if retval > 0:
                 best_rvec, best_tvec = self._select_best_pose(rvecs, tvecs)
-
-        # 绘制结果预览：有什么数据就画什么数据
+                # print(f"Pose estimated using {method_name}")
+        # 5. 绘制与返回
         self._draw_result(frame, c_corners, c_ids, m_corners, m_ids, best_rvec, best_tvec)
         return best_rvec, best_tvec
 
@@ -132,6 +171,7 @@ def main():
         if _ is False:
             continue
         rvec, tvec = estimator.on_image(img)
+        # print(f"Estimated tvec: {tvec}")
         # on_image 内部已完成绘制，这里直接显示
         cv2.imshow("Pose Estimation", img)
         if cv2.waitKey(1) & 0xFF == ord('q'):

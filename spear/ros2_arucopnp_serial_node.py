@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import os
+import struct
 import sys
 
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
+from geometry_msgs.msg import PointStamped
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image
@@ -23,24 +25,37 @@ from myserial import AsyncSerial_t
 # ---- 固定参数（按你的现场直接改这里） ----
 IMAGE_TOPIC = "/hik_camera/image"
 DRAW_RESULT_TOPIC = "/arucopnp/draw_result"
+OFFSET_MM_TOPIC = "/arucopnp/offset_mm"
 SERIAL_PORT = "/dev/serial_qh"
-SERIAL_BAUD = 230400
-
+SERIAL_BAUD = 115200
 
 class ArucoPnpSerialNode(Node):
     def __init__(self) -> None:
         super().__init__("arucopnp_serial_node")
-
-        self._estimator = HighPrecisionPoseEstimator()
+        K=np.array(
+          [ [1322.8397832601186, 0.0, 623.2118921253351],
+            [0.0, 1338.418629358359, 509.76668739080276],
+            [0.0, 0.0, 1.0]]     )
+        D=np.array([-0.131611456394353, 0.9770122703554055, -0.0037105334423302764, -0.0033209523486226952, -2.6406900561614206])
+        self._estimator = HighPrecisionPoseEstimator(K=K,D=D)
         self._bridge = CvBridge()
 
         self._draw_pub = self.create_publisher(Image, DRAW_RESULT_TOPIC, qos_profile_sensor_data)
-        self._img_sub = self.create_subscription(Image, IMAGE_TOPIC, self._on_image, qos_profile_sensor_data)
-        # self._serial = AsyncSerial_t(SERIAL_PORT, SERIAL_BAUD)
+        self._offset_pub = self.create_publisher(PointStamped, OFFSET_MM_TOPIC, 10)
+        self._img_sub = self.create_subscription(Image, IMAGE_TOPIC, self._on_image, 1)
+        self._serial = AsyncSerial_t(SERIAL_PORT, SERIAL_BAUD)
 
-        self.get_logger().info(f"image_topic={IMAGE_TOPIC}")
-        self.get_logger().info(f"draw_result_topic={DRAW_RESULT_TOPIC}")
-        self.get_logger().info(f"serial={SERIAL_PORT} @ {SERIAL_BAUD}")
+    @staticmethod
+    def _compute_offsets_mm(tvec: np.ndarray) -> tuple[float, float]:
+        """Convert solvePnP tvec(m) to left/up offsets in millimeters."""
+        t = np.asarray(tvec, dtype=np.float64).reshape(-1)
+        x_m, y_m = float(t[0]), float(t[1])
+        #检测是否为Nan如果是Nan则返回全0数据
+        if np.isnan(x_m) or np.isnan(y_m):
+            return 0.0, 0.0
+        left_mm = -x_m * 1000.0
+        up_mm = -y_m * 1000.0
+        return left_mm, up_mm
 
     def _on_image(self, msg: Image) -> None:
         frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
@@ -54,11 +69,21 @@ class ArucoPnpSerialNode(Node):
         if rvec is None or tvec is None:
             return
 
-        rv = np.array(rvec, dtype=np.float64).reshape(3)
-        tv = np.array(tvec, dtype=np.float64).reshape(3)
-        # 发串口
+        left_mm, up_mm = self._compute_offsets_mm(tvec)
+        print(f"left_mm: {left_mm:.1f}, up_mm: {up_mm:.1f}")
 
-        # self._serial.write(payload.encode("ascii"))
+        if abs(left_mm) > 1e-6 and abs(up_mm) > 1e-6:
+            offset_msg = PointStamped()
+            offset_msg.header = msg.header
+            offset_msg.point.x = left_mm
+            offset_msg.point.y = up_mm
+            offset_msg.point.z = 0.0
+            self._offset_pub.publish(offset_msg)
+
+            payload = struct.pack("<ff", left_mm, up_mm)
+            frame=bytes([0xFA, 0xB1]) + payload
+            self._serial.write(frame)
+        # self.get_logger().info(f"TX {frame.hex()}")
 
 
 def main(args=None) -> None:
