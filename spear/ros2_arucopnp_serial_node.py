@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import sys
 
+import cv2
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
@@ -29,7 +30,18 @@ OFFSET_MM_TOPIC = "/arucopnp/offset_mm"
 COMMAND_TOPIC = "/update_exec_req"
 START_COMMAND = "spear_build"
 STOP_COMMAND = "stop"
-
+# 对方真正对接点相对 ChArUco 原点的外参（单位：mm，默认全 0）
+TARGET_POINT_X_MM = 0.0
+TARGET_POINT_Y_MM = 0.0
+TARGET_POINT_Z_MM = 0.0
+# 我方真正对接参考点相对相机原点的外参（单位：mm，默认全 0）
+OUR_REF_X_MM = 0.0
+OUR_REF_Y_MM = 0.0
+OUR_REF_Z_MM = 0.0
+# 外参修正量（单位：mm），作用在滤波后的 left/up 偏移上
+LEFT_OFFSET_MM = 0.0
+UP_OFFSET_MM = 0.0
+YAW_OFFSET_DEG = 0.0
 class ArucoPnpSerialNode(Node):
     def __init__(self) -> None:
         super().__init__("arucopnp_serial_node")
@@ -69,16 +81,37 @@ class ArucoPnpSerialNode(Node):
             self.get_logger().info("Spear alignment disabled.")
 
     @staticmethod
-    def _compute_offsets_mm(tvec: np.ndarray) -> tuple[float, float]:
-        """Convert solvePnP tvec(m) to left/up offsets in millimeters."""
+    def _compute_alignment_error_mm(
+        rvec: np.ndarray,
+        tvec: np.ndarray,
+    ) -> tuple[float, float, float]:
+        """Compute left/up/forward alignment error from full pose."""
         t = np.asarray(tvec, dtype=np.float64).reshape(-1)
-        x_m, y_m = float(t[0]), float(t[1])
-        #检测是否为Nan如果是Nan则返回全0数据
-        if np.isnan(x_m) or np.isnan(y_m):
-            return 0.0, 0.0
-        left_mm = -x_m * 1000.0
-        up_mm = -y_m * 1000.0
-        return left_mm, up_mm
+        r = np.asarray(rvec, dtype=np.float64).reshape(-1)
+        if t.size < 3 or r.size < 3:
+            return 0.0, 0.0, 0.0
+        if not np.all(np.isfinite(t[:3])) or not np.all(np.isfinite(r[:3])):
+            return 0.0, 0.0, 0.0
+
+        rotation_matrix, _ = cv2.Rodrigues(r[:3].reshape(3, 1))
+
+        target_point_in_board_m = np.array(
+            [TARGET_POINT_X_MM, TARGET_POINT_Y_MM, TARGET_POINT_Z_MM],
+            dtype=np.float64,
+        ) / 1000.0
+        our_ref_in_camera_m = np.array(
+            [OUR_REF_X_MM, OUR_REF_Y_MM, OUR_REF_Z_MM],
+            dtype=np.float64,
+        ) / 1000.0
+
+        target_point_in_camera_m = rotation_matrix @ target_point_in_board_m + t[:3]
+        alignment_error_m = target_point_in_camera_m - our_ref_in_camera_m
+
+        left_mm = -float(alignment_error_m[0]) * 1000.0
+        up_mm = -float(alignment_error_m[1]) * 1000.0
+        forward_mm = float(alignment_error_m[2]) * 1000.0
+        return left_mm, up_mm, forward_mm
+
     def _on_image(self, msg: Image) -> None:
         frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         if not self._enabled:
@@ -97,11 +130,17 @@ class ArucoPnpSerialNode(Node):
         if rvec is None or tvec is None:
             return
 
-        raw_left, raw_up = self._compute_offsets_mm(tvec)
+        raw_left, raw_up, raw_forward = self._compute_alignment_error_mm(rvec, tvec)
 
         # One Euro Filter 平滑 + 死区抑制
         left_mm, up_mm = self._smoother.update(raw_left, raw_up)
-        print(f"raw=({raw_left:.1f}, {raw_up:.1f})  filtered=({left_mm:.1f}, {up_mm:.1f})")
+        left_mm += LEFT_OFFSET_MM
+        up_mm += UP_OFFSET_MM
+    
+        print(
+            f"raw=({raw_left:.1f}, {raw_up:.1f}, {raw_forward:.1f})  "
+            f"filtered=({left_mm:.1f}, {up_mm:.1f})"
+        )
 
         # 发布 ROS topic (发布滤波后的值)
         if abs(raw_left) > 1e-6 or abs(raw_up) > 1e-6:
