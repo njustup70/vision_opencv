@@ -4,7 +4,7 @@ services:
     # build:
     #   context: ..
     #   dockerfile: .devcontainer/Dockerfile
-    image: elainasuki/rc2026:yolo-ros #cpu镜像
+    image: elainasuki/rc2026:yolo-ros-arm #cpu镜像
     container_name: yolo_ros_dev
     environment:
       - DISPLAY=${DISPLAY}

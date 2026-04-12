@@ -25,6 +25,7 @@ basket_seg/labels.txt
 *.json
 *.jpg
 *.JPG
+*.png
 
 *.MP4
 *.svg
