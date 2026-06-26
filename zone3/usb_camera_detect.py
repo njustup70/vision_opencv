@@ -3,6 +3,13 @@ import cv2
 import subprocess
 import os
 import time
+import yaml
+import numpy as np
+
+# ==========================================
+# 标定文件路径配置
+# ==========================================
+CALIBRATION_YAML = "/home/Elaina/yolo/CameraCalibration/cal_yaml/camera_calibration_bl.yaml"
 
 DEVICE_INDEX = 4 
 DEVICE_PATH = f"/dev/video{DEVICE_INDEX}"
@@ -17,6 +24,31 @@ SHELF_CLASS = 15
 RED_CLASS = 16
 BLUE_CLASS = 17
 
+def load_camera_intrinsics(yaml_path):
+    """读取相机内参和畸变系数（自动兼容嵌套字典或纯列表格式）"""
+    if not os.path.exists(yaml_path):
+        raise FileNotFoundError(f"找不到标定文件: {yaml_path}")
+        
+    with open(yaml_path, 'r') as f:
+        calib_data = yaml.safe_load(f)
+        
+    # 解析内参矩阵
+    cam_mat = calib_data['camera_matrix']
+    if isinstance(cam_mat, dict) and 'data' in cam_mat:
+        mtx = np.array(cam_mat['data']).reshape(3, 3)
+    else:
+        # 如果直接是列表格式，直接转为 numpy 数组并 reshape
+        mtx = np.array(cam_mat).reshape(3, 3)
+        
+    # 解析畸变系数
+    dist_coeffs = calib_data['dist_coeffs']
+    if isinstance(dist_coeffs, dict) and 'data' in dist_coeffs:
+        dist = np.array(dist_coeffs['data'])
+    else:
+        # 如果直接是列表格式，直接转为 numpy 数组
+        dist = np.array(dist_coeffs)
+        
+    return mtx, dist
 
 def apply_camera_controls():
     cmds = [
@@ -77,7 +109,6 @@ def build_grid(shelf, kfs):
         
     return grid
 
-
 def draw_grid(frame, shelf):
     "九宫格"
     x1, y1, x2, y2 = shelf
@@ -86,7 +117,6 @@ def draw_grid(frame, shelf):
         x = x1 + i * (x2 - x1) // 3
         cv2.line(frame, (x1, y), (x2, y), (0, 200, 200), 2)
         cv2.line(frame, (x, y1), (x, y2), (0, 200, 200), 2)
-
 
 def summarize_grid(grid, red_acc, blue_acc):
     total_kfs = 0
@@ -106,17 +136,34 @@ def summarize_grid(grid, red_acc, blue_acc):
                 
     return total_kfs, "  ".join(current_print_parts)
 
-
 def main():
     apply_camera_controls()
     os.makedirs(SAVE_DIR, exist_ok=True)
+    
+    # -----------------------------
+    # 1. 加载标定参数并预计算映射矩阵
+    # -----------------------------
+    print("正在加载相机标定参数...")
+    mtx, dist = load_camera_intrinsics(CALIBRATION_YAML)
 
     saved_img_count = len([name for name in os.listdir(SAVE_DIR) if name.endswith('.jpg')])
-
     model = YOLO("best.pt") 
 
     cap = cv2.VideoCapture(DEVICE_INDEX)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    
+    # 获取相机分辨率以生成映射表
+    ret, sample_frame = cap.read()
+    if not ret:
+        print("初始读取摄像头失败，请检查连接。")
+        return
+        
+    h, w = sample_frame.shape[:2]
+    # alpha=0 表示裁剪掉畸变校正后产生的黑边，保证画面无畸变且填满窗口
+    new_mtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w, h), 0, (w, h))
+    # 预先生成 X, Y 像素映射表（极大提升运行帧率）
+    mapx, mapy = cv2.initUndistortRectifyMap(mtx, dist, None, new_mtx, (w, h), cv2.CV_16SC2)
+    print("映射矩阵初始化完成。")
 
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(WINDOW_NAME, 1280, 720)
@@ -142,6 +189,12 @@ def main():
             
         retry_count = 0  
 
+        # -----------------------------
+        # 2. 对当前帧执行极速去畸变映射
+        # -----------------------------
+        frame = cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
+        
+        # 将去畸变后的规整画面喂给 YOLO
         results = model(frame, conf=min(CONF_SHELF, CONF_KFS), verbose=False)
         shelf, kfs = detect_shelf_and_kfs(results[0], frame)
 
