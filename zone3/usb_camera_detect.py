@@ -50,7 +50,7 @@ def load_camera_intrinsics(yaml_path):
 
 def apply_camera_controls():
     cmds = [
-        ["v4l2-ctl", "-d", DEVICE_PATH, "--set-ctrl=brightness=50"],
+        ["v4l2-ctl", "-d", DEVICE_PATH, "--set-ctrl=brightness=30"],
         ["v4l2-ctl", "-d", DEVICE_PATH, "--set-ctrl=contrast=4"],
         ["v4l2-ctl", "-d", DEVICE_PATH, "--set-ctrl=saturation=50"],
         ["v4l2-ctl", "-d", DEVICE_PATH, "--set-ctrl=exposure_time_absolute=300"],
