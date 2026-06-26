@@ -25,7 +25,7 @@ RED_CLASS = 16
 BLUE_CLASS = 17
 
 def load_camera_intrinsics(yaml_path):
-    """读取相机内参和畸变系数（自动兼容嵌套字典或纯列表格式）"""
+    """读取相机内参和畸变系数"""
     if not os.path.exists(yaml_path):
         raise FileNotFoundError(f"找不到标定文件: {yaml_path}")
         
@@ -37,7 +37,6 @@ def load_camera_intrinsics(yaml_path):
     if isinstance(cam_mat, dict) and 'data' in cam_mat:
         mtx = np.array(cam_mat['data']).reshape(3, 3)
     else:
-        # 如果直接是列表格式，直接转为 numpy 数组并 reshape
         mtx = np.array(cam_mat).reshape(3, 3)
         
     # 解析畸变系数
@@ -45,7 +44,6 @@ def load_camera_intrinsics(yaml_path):
     if isinstance(dist_coeffs, dict) and 'data' in dist_coeffs:
         dist = np.array(dist_coeffs['data'])
     else:
-        # 如果直接是列表格式，直接转为 numpy 数组
         dist = np.array(dist_coeffs)
         
     return mtx, dist

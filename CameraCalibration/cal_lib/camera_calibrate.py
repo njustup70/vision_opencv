@@ -5,7 +5,7 @@ import yaml
 
 # ================== 参数配置 ==================
 CHECKERBOARD = (9, 6)        # 棋盘格内角点数量 (cols, rows)
-SQUARE_SIZE = 0.02403       # 棋盘格实际边长（米）
+SQUARE_SIZE = 0.02403       # 棋盘格实际边长（米）(replace with your actual square size)
 
 CALIB_IMG_PATH = "../calibration_img/*.jpg"  # 标定图片路径
 OUTPUT_FILE = "../cal_yaml/camera_calibration.yaml"  # 标定结果保存路径

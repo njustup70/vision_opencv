@@ -3,25 +3,14 @@ import os
 import glob
 import re
 
-# -----------------------------
-# 配置存储目录
-# -----------------------------
-save_dir = "/home/Elaina/yolo/CameraCalibration/calibration_img"  # 你可以修改为你想要的文件夹名称或绝对路径
+save_dir = "/home/Elaina/yolo/CameraCalibration/calibration_img"  
 os.makedirs(save_dir, exist_ok=True) # 如果文件夹不存在则自动创建
 print(f"照片将保存在目录: {os.path.abspath(save_dir)}")
 
-# -----------------------------
-# 初始化摄像头
-# -----------------------------
-cap = cv2.VideoCapture(4)  # 保持你指定的摄像头索引 4
+cap = cv2.VideoCapture(4)  
 
-# -----------------------------
-# 自动计算起始序号（避免覆盖已有文件）
-# -----------------------------
-# 更新 glob 搜索路径，限定在指定的文件夹内
 existing_files = glob.glob(os.path.join(save_dir, "test_calibration_*.jpg"))
 count = 1  # 默认从1开始
-
 if existing_files:
     # 提取现有文件中的最大序号
     numbers = []
@@ -34,9 +23,6 @@ if existing_files:
     if numbers:
         count = max(numbers) + 1
 
-# -----------------------------
-# 拍照主程序
-# -----------------------------
 print("摄像头已启动，按 [ENTER] 拍照，按 [ESC] 退出")
   
 while True:
