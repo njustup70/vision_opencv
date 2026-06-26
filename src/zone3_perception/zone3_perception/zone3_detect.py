@@ -200,7 +200,7 @@ def main():
                 grid[idx] = 2
         msg = Int8MultiArray()
         msg.data = grid
-        pub.publish(msg)-
+        pub.publish(msg)
 
         if detected_blocks:
             frame_cnt += 1
