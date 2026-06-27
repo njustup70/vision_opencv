@@ -53,8 +53,9 @@ R2_HEAD_AXIS_Z_IN_CAMERA = 1.0
 # False：只用矛杆中心点和矛头中心点做点对点平移误差。
 USE_AXIS_INTERSECTION_COMPENSATION = True
 # 外参修正量（单位：mm），作用在滤波后的 left/up 偏移上
-LEFT_OFFSET_MM = 0.0
-UP_OFFSET_MM = 0.0
+LEFT_OFFSET_MM = -76.0
+# UP_OFFSET_MM = -200.0
+UP_RESULT= -30.0
 # 只用于 yaw 调试显示的零点修正；left/up 补偿由轴线和平面交点计算得到。
 YAW_OFFSET_DEG = 0.0
 
@@ -199,6 +200,7 @@ class ArucoPnpSerialNode(Node):
 
     def _on_image(self, msg: Image) -> None:
         frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        # print(f"收到图像 {frame.shape[1]}x{frame.shape[0]} @ {msg.header.stamp.sec}.{msg.header.stamp.nanosec:09d}")
         if not self._enabled:
             out_msg = self._bridge.cv2_to_imgmsg(frame, encoding="bgr8")
             out_msg.header = msg.header
@@ -220,8 +222,9 @@ class ArucoPnpSerialNode(Node):
         # One Euro Filter 平滑 + 死区抑制
         left_mm, up_mm = self._smoother.update(raw_left, raw_up)
         left_mm += LEFT_OFFSET_MM
-        up_mm += UP_OFFSET_MM
-    
+        # up_mm += UP_OFFSET_MM
+        up_mm=UP_RESULT
+
         print(
             f"raw=({raw_left:.1f}, {raw_up:.1f}, {raw_forward:.1f})  "
             f"yaw={raw_yaw:+.2f}deg  "
