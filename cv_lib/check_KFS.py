@@ -33,13 +33,13 @@ def check_red_blue(warped):
     result_red = mask_3x3_ratio(mask_red)
     result_blue = mask_3x3_ratio(mask_blue)
 
-    thr = 0.25
+    thr = 0.4
     red_hit  = (result_red  >= thr)
     blue_hit = (result_blue >= thr)
 
     # 0/1/2 编码：红=1，蓝=2（红蓝都满足会变 3）
     result = red_hit.astype(np.uint8) + 2 * blue_hit.astype(np.uint8)
-    return result
+    return result.tolist()
 
 def main():
     img_name = "restored_5.jpg"

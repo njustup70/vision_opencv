@@ -48,8 +48,9 @@ def gray_world_wb(img):
     # OpenCV 内部完成：乘矩阵 + 饱和 + uint8
     return cv2.transform(img, M)
 
-def clahe_on_v(img_hsv, clip=2.0, grid=(8,8)): # 对 V 通道做 CLAHE
-    clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=grid)
+def clahe_on_v(img_hsv, clip=2.0, grid=(8,8), clahe=None): # 对 V 通道做 CLAHE
+    if clahe is None:
+        clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=grid)
     img_hsv[:,:,2] = clahe.apply(img_hsv[:,:,2])
     return img_hsv
 
@@ -71,6 +72,7 @@ def get_red_blue_mask(img_hsv, blue = True, red = True, kernel_size = (7,7)): # 
         lower_blue = np.array([95,  s_min, v_min])
         upper_blue = np.array([135, 255, 255])
         mask_blue = cv2.inRange(img_hsv, lower_blue, upper_blue)
+        cv2.imshow("mask_blue", mask_blue)
     else:
         mask_blue = 0
 
@@ -81,8 +83,10 @@ def get_red_blue_mask(img_hsv, blue = True, red = True, kernel_size = (7,7)): # 
         lower_red2 = np.array([170, s_min, v_min])
         upper_red2 = np.array([179, 255,   255])
         mask_red = cv2.inRange(img_hsv, lower_red1, upper_red1) | cv2.inRange(img_hsv, lower_red2, upper_red2)
+        cv2.imshow("mask_red", mask_red)
     else:
         mask_red = 0
+
 
     mask = mask_blue | mask_red
 

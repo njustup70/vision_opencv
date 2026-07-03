@@ -31,3 +31,6 @@ basket_seg/labels.txt
 
 runs/
 rosbag2*/
+
+*.mcap
+metadata.yaml
