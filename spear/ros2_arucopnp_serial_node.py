@@ -25,7 +25,7 @@ from signal_filter import OffsetSmoother
 
 
 # ---- 固定参数（按你的现场直接改这里） ----
-IMAGE_TOPIC = "/camera/image"
+IMAGE_TOPIC = "/hik_camera/image_raw"
 DRAW_RESULT_TOPIC = "/arucopnp/draw_result"
 OFFSET_MM_TOPIC = "/arucopnp/offset_mm"
 COMMAND_TOPIC = "/update_exec_req"
@@ -53,9 +53,9 @@ R2_HEAD_AXIS_Z_IN_CAMERA = 1.0
 # False：只用矛杆中心点和矛头中心点做点对点平移误差。
 USE_AXIS_INTERSECTION_COMPENSATION = True
 # 外参修正量（单位：mm），作用在滤波后的 left/up 偏移上
-LEFT_OFFSET_MM = -76.0
+LEFT_OFFSET_MM = -53.0
 # UP_OFFSET_MM = -200.0
-UP_RESULT= -30.0
+UP_RESULT= -20.0
 # 只用于 yaw 调试显示的零点修正；left/up 补偿由轴线和平面交点计算得到。
 YAW_OFFSET_DEG = 0.0
 
@@ -64,10 +64,10 @@ class ArucoPnpSerialNode(Node):
     def __init__(self) -> None:
         super().__init__("arucopnp_serial_node")
         K=np.array(
-          [ [1303.3829702677394, 0.0, 661.2038307872303],
-            [0.0, 1306.3693431861477, 532.233559320766],
+          [ [1301.1167695971926, 0.0, 618.8649503224167],
+            [0.0, 1300.52230424669, 525.5565334404847],
             [0.0, 0.0, 1.0]]     )
-        D=np.array([-0.05029141860380285, -0.09758400643623534, -0.004297721324416505, 0.008291128442063526, 0.41130598405875557])
+        D=np.array([-0.0457043987, -0.2172562790, -0.002088440089, 0.000944754920863791,1.3830427124470757])
         self._estimator = HighPrecisionPoseEstimator(K=K,D=D)
         self._bridge = CvBridge()
 
