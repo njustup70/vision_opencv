@@ -34,7 +34,11 @@ def _aruco_dict(name: str):
         raise RuntimeError("This OpenCV build has no cv2.aruco module. Install opencv-contrib support.")
     if not name.startswith("DICT_"):
         name = "DICT_" + name
-    return cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, name))
+    dict_id = getattr(cv2.aruco, name)
+    # OpenCV >= 4.7: getPredefinedDictionary; < 4.7: Dictionary_get
+    if hasattr(cv2.aruco, "getPredefinedDictionary"):
+        return cv2.aruco.getPredefinedDictionary(dict_id)
+    return cv2.aruco.Dictionary_get(dict_id)
 
 
 def _set_board_ids(board, ids_start: int) -> None:
