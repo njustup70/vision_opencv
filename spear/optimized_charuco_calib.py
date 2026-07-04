@@ -340,7 +340,11 @@ def _camera_yaml(camera_name, image_size, camera_matrix, dist_coeffs, rms, sampl
 
 
 def _save_yaml(path, data):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    path = os.path.expanduser(str(path))
+    parent = os.path.dirname(path)
+    if not parent:
+        parent = "."
+    os.makedirs(parent, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
 
