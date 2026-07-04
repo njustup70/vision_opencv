@@ -25,7 +25,7 @@ from signal_filter import OffsetSmoother
 
 
 # ---- 固定参数（按你的现场直接改这里） ----
-IMAGE_TOPIC = "/hik_camera/image_raw"
+IMAGE_TOPIC = "/camera/image"
 DRAW_RESULT_TOPIC = "/arucopnp/draw_result"
 OFFSET_MM_TOPIC = "/arucopnp/offset_mm"
 COMMAND_TOPIC = "/update_exec_req"
@@ -64,10 +64,10 @@ class ArucoPnpSerialNode(Node):
     def __init__(self) -> None:
         super().__init__("arucopnp_serial_node")
         K=np.array(
-          [ [1322.8397832601186, 0.0, 623.2118921253351],
-            [0.0, 1338.418629358359, 509.76668739080276],
+          [ [1303.3829702677394, 0.0, 661.2038307872303],
+            [0.0, 1306.3693431861477, 532.233559320766],
             [0.0, 0.0, 1.0]]     )
-        D=np.array([-0.131611456394353, 0.9770122703554055, -0.0037105334423302764, -0.0033209523486226952, -2.6406900561614206])
+        D=np.array([-0.05029141860380285, -0.09758400643623534, -0.004297721324416505, 0.008291128442063526, 0.41130598405875557])
         self._estimator = HighPrecisionPoseEstimator(K=K,D=D)
         self._bridge = CvBridge()
 
