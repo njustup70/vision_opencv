@@ -85,6 +85,22 @@ def _detector_params():
     return cv2.aruco.DetectorParameters()
 
 
+def _create_charuco_detector(board, detector_params):
+    if not hasattr(cv2.aruco, "CharucoDetector"):
+        return None
+    try:
+        if hasattr(cv2.aruco, "CharucoParameters"):
+            return cv2.aruco.CharucoDetector(
+                board, cv2.aruco.CharucoParameters(), detector_params
+            )
+        return cv2.aruco.CharucoDetector(board)
+    except Exception:
+        try:
+            return cv2.aruco.CharucoDetector(board)
+        except Exception:
+            return None
+
+
 def _detect_markers(gray, dictionary, params):
     if hasattr(cv2.aruco, "ArucoDetector"):
         detector = cv2.aruco.ArucoDetector(dictionary, params)
@@ -154,7 +170,66 @@ def _refine_markers(gray, board, corners, ids, rejected):
 def _interpolate_charuco(gray, board, corners, ids):
     if ids is None or len(ids) == 0:
         return 0, None, None
+    if not hasattr(cv2.aruco, "interpolateCornersCharuco"):
+        raise RuntimeError(
+            "This OpenCV cv2.aruco build has no interpolateCornersCharuco. "
+            "Use CharucoDetector.detectBoard or install a compatible opencv-contrib build."
+        )
     return cv2.aruco.interpolateCornersCharuco(corners, ids, gray, board)
+
+
+def _detect_charuco(gray, board, dictionary, params, charuco_detector):
+    if charuco_detector is not None:
+        try:
+            charuco_corners, charuco_ids, marker_corners, marker_ids = charuco_detector.detectBoard(gray)
+            num = 0 if charuco_corners is None else len(charuco_corners)
+            return marker_corners, marker_ids, [], int(num), charuco_corners, charuco_ids
+        except Exception:
+            pass
+
+    corners, ids, rejected = _detect_markers(gray, dictionary, params)
+    corners, ids, rejected = _refine_markers(gray, board, corners, ids, rejected)
+    num, charuco_corners, charuco_ids = _interpolate_charuco(gray, board, corners, ids)
+    return corners, ids, rejected, int(num), charuco_corners, charuco_ids
+
+
+def _board_chessboard_corners(board) -> np.ndarray:
+    if hasattr(board, "getChessboardCorners"):
+        return np.asarray(board.getChessboardCorners(), dtype=np.float32)
+    if hasattr(board, "chessboardCorners"):
+        return np.asarray(board.chessboardCorners, dtype=np.float32)
+    raise RuntimeError("This OpenCV CharucoBoard API does not expose chessboard corners.")
+
+
+def _calibrate_charuco_fallback(corners_list, ids_list, board, image_size, criteria):
+    chessboard_corners = _board_chessboard_corners(board).reshape(-1, 3)
+    object_points = []
+    image_points = []
+
+    for corners, ids in zip(corners_list, ids_list):
+        if corners is None or ids is None:
+            continue
+        corner_ids = np.asarray(ids, dtype=np.int32).reshape(-1)
+        image_corners = np.asarray(corners, dtype=np.float32).reshape(-1, 2)
+        valid = (corner_ids >= 0) & (corner_ids < len(chessboard_corners))
+        if np.count_nonzero(valid) < 4:
+            continue
+        object_points.append(chessboard_corners[corner_ids[valid]].astype(np.float32))
+        image_points.append(image_corners[valid].astype(np.float32))
+
+    if not object_points:
+        raise RuntimeError("No valid ChArUco object/image point sets for calibration.")
+
+    rms, camera_matrix, dist_coeffs, _rvecs, _tvecs = cv2.calibrateCamera(
+        object_points,
+        image_points,
+        image_size,
+        None,
+        None,
+        flags=0,
+        criteria=criteria,
+    )
+    return float(rms), camera_matrix, dist_coeffs
 
 
 def _calibrate_charuco(corners_list, ids_list, board, image_size):
@@ -180,17 +255,19 @@ def _calibrate_charuco(corners_list, ids_list, board, image_size):
             criteria=criteria,
         )
         return float(rms), camera_matrix, dist_coeffs
-    rms, camera_matrix, dist_coeffs, _rvecs, _tvecs = cv2.aruco.calibrateCameraCharuco(
-        corners_list,
-        ids_list,
-        board,
-        image_size,
-        None,
-        None,
-        flags=0,
-        criteria=criteria,
-    )
-    return float(rms), camera_matrix, dist_coeffs
+    if hasattr(cv2.aruco, "calibrateCameraCharuco"):
+        rms, camera_matrix, dist_coeffs, _rvecs, _tvecs = cv2.aruco.calibrateCameraCharuco(
+            corners_list,
+            ids_list,
+            board,
+            image_size,
+            None,
+            None,
+            flags=0,
+            criteria=criteria,
+        )
+        return float(rms), camera_matrix, dist_coeffs
+    return _calibrate_charuco_fallback(corners_list, ids_list, board, image_size, criteria)
 
 
 def _camera_yaml(camera_name, image_size, camera_matrix, dist_coeffs, rms, samples, extra=None):
@@ -250,6 +327,7 @@ class OptimizedCharucoCalib(Node):
         self.cfg = cfg
         self.board, self.dictionary = _create_charuco_board(cfg["board"])
         self.detector_params = _detector_params()
+        self.charuco_detector = _create_charuco_detector(self.board, self.detector_params)
 
         cal = cfg["calibration"]
         self.rounds = int(cal["rounds"])
@@ -367,10 +445,9 @@ class OptimizedCharucoCalib(Node):
             threading.Thread(target=self._shutdown_soon, daemon=True).start()
             return
 
-        corners, ids, rejected = _detect_markers(gray, self.dictionary, self.detector_params)
-        corners, ids, rejected = _refine_markers(gray, self.board, corners, ids, rejected)
-        num, charuco_corners, charuco_ids = _interpolate_charuco(gray, self.board, corners, ids)
-        num = int(num)
+        corners, ids, _rejected, num, charuco_corners, charuco_ids = _detect_charuco(
+            gray, self.board, self.dictionary, self.detector_params, self.charuco_detector
+        )
         if charuco_corners is None or charuco_ids is None or num < self.min_charuco_corners:
             self._show(gray, corners, ids, None, None, num)
             return
@@ -633,7 +710,7 @@ def main():
             "save_best_yaml": "~/charuco_calib_output/camera_best.yaml",
         },
         "topics": {
-            "image": "/camera/image_raw",        # ROS2 图像话题
+            "image": "/hik_camera/image_raw",    # ROS2 图像话题
         },
     }
     rclpy.init()

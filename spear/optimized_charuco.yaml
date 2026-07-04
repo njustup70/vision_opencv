@@ -9,7 +9,7 @@ board:
   board_height_mm: 150
 
 topics:
-  image: /camera/image
+  image: /hik_camera/image_raw
 
 calibration:
   rounds: 5
