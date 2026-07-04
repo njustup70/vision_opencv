@@ -605,11 +605,37 @@ class OptimizedCharucoCalib(Node):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True)
-    args = parser.parse_args()
-    with open(args.config, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+    # ============================================================
+    # 硬编码配置 —— 直接改下面的值，无需传参即可运行
+    # ============================================================
+    cfg = {
+        "board": {
+            "dictionary": "DICT_4X4_250",       # ArUco 字典
+            "squares_x": 5,                      # ChArUco 棋盘横向格子数
+            "squares_y": 7,                      # ChArUco 棋盘纵向格子数
+            "square_length_m": 0.04,             # 棋盘格边长 (米)
+            "marker_length_m": 0.02,             # ArUco 标记边长 (米)
+            "ids_start": 0,                      # 标记起始 ID
+        },
+        "calibration": {
+            "rounds": 5,                         # 标定轮数
+            "samples_per_round": 30,             # 每轮采集样本数
+            "sample_stride": 1,                  # 采样步长
+            "process_hz": 5.0,                   # 处理频率
+            "min_charuco_corners": 10,           # 最少 ChArUco 角点数
+            "max_samples_per_round": 100,        # 每轮最大样本数
+            "settle_seconds_between_rounds": 2.0,# 轮间稳定时间 (秒)
+            "show_opencv_window": True,          # 显示 OpenCV 预览窗口
+            "publish_debug_image": True,         # 发布调试图像
+            "output_dir": "~/charuco_calib_output",  # 输出目录
+            "camera_name": "camera",             # 相机名称
+            "save_average_yaml": "~/charuco_calib_output/camera_average.yaml",
+            "save_best_yaml": "~/charuco_calib_output/camera_best.yaml",
+        },
+        "topics": {
+            "image": "/camera/image_raw",        # ROS2 图像话题
+        },
+    }
     rclpy.init()
     node = OptimizedCharucoCalib(cfg)
     try:
