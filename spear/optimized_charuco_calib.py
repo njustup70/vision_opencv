@@ -81,8 +81,32 @@ def _create_charuco_board(cfg: dict):
 
 def _detector_params():
     if hasattr(cv2.aruco, "DetectorParameters_create"):
-        return cv2.aruco.DetectorParameters_create()
-    return cv2.aruco.DetectorParameters()
+        params = cv2.aruco.DetectorParameters_create()
+    else:
+        params = cv2.aruco.DetectorParameters()
+
+    tuned_values = {
+        "adaptiveThreshWinSizeMin": 3,
+        "adaptiveThreshWinSizeMax": 53,
+        "adaptiveThreshWinSizeStep": 4,
+        "adaptiveThreshConstant": 7,
+        "minMarkerPerimeterRate": 0.015,
+        "maxMarkerPerimeterRate": 4.0,
+        "polygonalApproxAccuracyRate": 0.03,
+        "minCornerDistanceRate": 0.03,
+        "minDistanceToBorder": 2,
+        "cornerRefinementMethod": getattr(cv2.aruco, "CORNER_REFINE_SUBPIX", 1),
+        "cornerRefinementWinSize": 5,
+        "cornerRefinementMaxIterations": 50,
+        "cornerRefinementMinAccuracy": 0.01,
+        "markerBorderBits": 1,
+        "minOtsuStdDev": 3.0,
+        "errorCorrectionRate": 0.8,
+    }
+    for name, value in tuned_values.items():
+        if hasattr(params, name):
+            setattr(params, name, value)
+    return params
 
 
 def _create_charuco_detector(board, detector_params):
@@ -378,6 +402,14 @@ class OptimizedCharucoCalib(Node):
             self.create_publisher(Image, "~/debug_image", qos_profile_sensor_data)
             if self.publish_debug_image
             else None
+        )
+        board_cfg = cfg["board"]
+        self.get_logger().info(
+            "Board: "
+            f"{board_cfg['dictionary']}, "
+            f"{board_cfg['squares_x']}x{board_cfg['squares_y']}, "
+            f"square={board_cfg['square_length_m']}m, "
+            f"marker={board_cfg['marker_length_m']}m"
         )
         self.get_logger().info(f"Subscribing image: {image_topic}")
         self.get_logger().info(
@@ -682,37 +714,13 @@ class OptimizedCharucoCalib(Node):
 
 
 def main():
-    # ============================================================
-    # 硬编码配置 —— 直接改下面的值，无需传参即可运行
-    # ============================================================
-    cfg = {
-        "board": {
-            "dictionary": "DICT_4X4_250",       # ArUco 字典
-            "squares_x": 5,                      # ChArUco 棋盘横向格子数
-            "squares_y": 7,                      # ChArUco 棋盘纵向格子数
-            "square_length_m": 0.04,             # 棋盘格边长 (米)
-            "marker_length_m": 0.02,             # ArUco 标记边长 (米)
-            "ids_start": 0,                      # 标记起始 ID
-        },
-        "calibration": {
-            "rounds": 5,                         # 标定轮数
-            "samples_per_round": 30,             # 每轮采集样本数
-            "sample_stride": 1,                  # 采样步长
-            "process_hz": 5.0,                   # 处理频率
-            "min_charuco_corners": 10,           # 最少 ChArUco 角点数
-            "max_samples_per_round": 100,        # 每轮最大样本数
-            "settle_seconds_between_rounds": 2.0,# 轮间稳定时间 (秒)
-            "show_opencv_window": True,          # 显示 OpenCV 预览窗口
-            "publish_debug_image": True,         # 发布调试图像
-            "output_dir": "~/charuco_calib_output",  # 输出目录
-            "camera_name": "camera",             # 相机名称
-            "save_average_yaml": "~/charuco_calib_output/camera_average.yaml",
-            "save_best_yaml": "~/charuco_calib_output/camera_best.yaml",
-        },
-        "topics": {
-            "image": "/hik_camera/image_raw",    # ROS2 图像话题
-        },
-    }
+    default_config = os.path.join(os.path.dirname(os.path.abspath(__file__)), "optimized_charuco.yaml")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default=default_config)
+    args = parser.parse_args()
+    with open(args.config, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
     rclpy.init()
     node = OptimizedCharucoCalib(cfg)
     try:
