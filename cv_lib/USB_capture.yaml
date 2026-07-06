@@ -1,5 +1,5 @@
 camera:
-  device: /dev/video0
+  device: /dev/usb_camera
 
   format:
     width: 640
