@@ -28,7 +28,7 @@ from spear_vision.core.high_precision_pose_estimator import HighPrecisionPoseEst
 from spear_vision.utils.async_serial import AsyncSerial_t
 
 # ---- 固定参数 ----
-IMAGE_TOPIC = "/hik_camera/image"
+IMAGE_TOPIC = "/hik_camera/image_raw"
 DRAW_RESULT_TOPIC = "/arucopnp/draw_result"
 OFFSET_MM_TOPIC = "/arucopnp/offset_mm"
 SERIAL_PORT = "/dev/ch340"
