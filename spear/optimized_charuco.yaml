@@ -1,0 +1,29 @@
+board:
+  squares_x: 8
+  squares_y: 6
+  square_length_m: 0.025
+  marker_length_m: 0.01875
+  dictionary: DICT_6X6_250
+  ids_start: 0
+  board_width_mm: 200
+  board_height_mm: 150
+
+topics:
+  image: /hik_camera/image_raw
+
+calibration:
+  rounds: 5
+  samples_per_round: 60
+  sample_stride: 1
+  process_hz: 5.0
+  min_charuco_corners: 20
+  max_samples_per_round: 120
+  settle_seconds_between_rounds: 1.0
+  auto_start: true
+  show_opencv_window: true
+  publish_debug_image: false
+  output_dir: ~/charuco_calib_output
+  camera_name: hik_camera
+  save_joint_yaml: ~/charuco_calib_output/camera_joint.yaml
+  save_average_yaml: ~/charuco_calib_output/camera_average.yaml
+  save_best_yaml: ~/charuco_calib_output/camera_best.yaml
