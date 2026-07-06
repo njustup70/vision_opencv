@@ -14,8 +14,9 @@ from launch_ros.actions import Node
 def generate_launch_description():
     # launch 文件位于 <ws>/src/spear_vision/launch/launch_vision.launch.py
     # 往上 4 层 → workspace 根
+    # 注意: 必须用 realpath，因为 ros2 launch 通过 install/ 下的 symlink 加载此文件
     ws_root = os.path.dirname(os.path.dirname(os.path.dirname(
-        os.path.dirname(os.path.abspath(__file__)))))
+        os.path.dirname(os.path.realpath(__file__)))))
     model_path = os.path.join(ws_root, "1.20.pt")
 
     # ---- YOLO 目标检测节点 ----
