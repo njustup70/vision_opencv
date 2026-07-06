@@ -31,8 +31,8 @@ from spear_vision.utils.async_serial import AsyncSerial_t
 IMAGE_TOPIC = "/hik_camera/image"
 DRAW_RESULT_TOPIC = "/arucopnp/draw_result"
 OFFSET_MM_TOPIC = "/arucopnp/offset_mm"
-SERIAL_PORT = "/dev/serial_qh"
-SERIAL_BAUD = 115200
+SERIAL_PORT = "/dev/ch340"
+SERIAL_BAUD = 921600
 
 
 class ArucoPnpSerialNode(Node):
