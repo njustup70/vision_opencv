@@ -1,0 +1,35 @@
+camera:
+  device: /dev/usb_camera
+
+  format:
+    width: 640
+    height: 480
+    fps: 30
+    pixel_format: YUYV   # 或 MJPG
+
+  controls:
+    auto_exposure: 3              # 1: Manual Mode 3: Aperture Priority
+    # exposure_time_absolute: 300   # 仅在手动曝光时生效
+
+    white_balance_automatic: 1    # 0：手动 1：自动
+    # white_balance_temperature: 5000
+
+    brightness: 0
+    contrast: 4
+    gamma: 100
+    saturation: 50
+    sharpness: 2
+    backlight_compensation: 10
+
+    power_line_frequency: 1       # 0:disabled 1:50 Hz 2: 60 Hz
+
+  udev:
+    commend: sudo tee /etc/udev/rules.d/99-usb-camera.rules >/dev/null <<'EOF'
+              SUBSYSTEM=="video4linux", KERNEL=="video*", \
+              ATTRS{idVendor}=="1d6c", ATTRS{idProduct}=="0103", ATTRS{serial}=="01.00.00", \
+              ENV{ID_V4L_CAPABILITIES}=="*:capture:*", \
+              KERNELS=="3-3.4", \
+              MODE:="0777", GROUP:="video", \
+              SYMLINK+="usb_camera_1"
+            EOF
+

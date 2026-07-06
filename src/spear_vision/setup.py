@@ -40,6 +40,10 @@ setup(
             "spear_tip_calib = spear_vision.nodes.spear_tip_calib_node:main",
             # 运行测量专用（只看大板）
             "spear_tip_run = spear_vision.nodes.spear_tip_run_node:main",
+            # ArUco PnP + 串口（整合自 spear/ros2_arucopnp_serial_node.py）
+            "arucopnp_serial = spear_vision.nodes.arucopnp_serial_node:main",
+            # YOLO 目标检测（整合自 cv_lib/YOLO2topic.py）
+            "yolo_detection = spear_vision.nodes.yolo_detection_node:main",
         ],
     },
 )
