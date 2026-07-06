@@ -102,21 +102,21 @@ class ArucoPnpSerialNode(Node):
         # beta:       动态跟随系数 (越大快速移动时越灵敏)
         # dead_zone_mm: 死区阈值, 小于此值视为静止不发送
         self._smoother = OffsetSmoother(min_cutoff=0.5, beta=0.007, dead_zone_mm=0.3)
-        self.get_logger().info(
-            f"等待 {COMMAND_TOPIC} == '{START_COMMAND}' 后开始矛杆对接。"
-        )
+        # self.get_logger().info(
+        #     f"等待 {COMMAND_TOPIC} == '{START_COMMAND}' 后开始矛杆对接。"
+        # )
 
     def _on_exec_request(self, msg: String) -> None:
         command = msg.data.strip()
         if command == START_COMMAND:
             self._enabled = True
             self._smoother.reset()
-            self.get_logger().info("矛杆对接已启用。")
+            # self.get_logger().info("矛杆对接已启用。")
             return
         if command == STOP_COMMAND:
             self._enabled = False
             self._smoother.reset()
-            self.get_logger().info("矛杆对接已停止。")
+            # self.get_logger().info("矛杆对接已停止。")
 
     @staticmethod
     def _compute_alignment_error_mm(
@@ -245,11 +245,11 @@ class ArucoPnpSerialNode(Node):
         # up_mm += UP_OFFSET_MM
         up_mm = UP_RESULT
 
-        print(
-            f"raw=({raw_left:.1f}, {raw_up:.1f}, {raw_forward:.1f})  "
-            f"yaw={raw_yaw:+.2f}deg  "
-            f"filtered=({left_mm:.1f}, {up_mm:.1f})"
-        )
+        # print(
+        #     f"raw=({raw_left:.1f}, {raw_up:.1f}, {raw_forward:.1f})  "
+        #     f"yaw={raw_yaw:+.2f}deg  "
+        #     f"filtered=({left_mm:.1f}, {up_mm:.1f})"
+        # )
 
         # 发布 ROS topic（发布滤波后的值）
         if abs(raw_left) > 1e-6 or abs(raw_up) > 1e-6:
