@@ -5,7 +5,9 @@ YOLO 目标检测 ROS 2 节点
 
 发布话题:
   - YOLO_detection       (std_msgs/String)   检测到的类别名
-  - YOLO_detection_image (sensor_msgs/Image)  带标注框的视频流
+
+调试显示:
+  - 本地 OpenCV 弹窗 (不占用通信带宽)
 
 参数:
   - model_path   : YOLO 模型文件路径 (默认: workspace 根目录下的 1.20.pt)
@@ -22,9 +24,7 @@ import cv2
 import rclpy
 import yaml
 from ament_index_python.packages import get_package_share_directory
-from cv_bridge import CvBridge
 from rclpy.node import Node
-from sensor_msgs.msg import Image
 from std_msgs.msg import String
 from ultralytics import YOLO
 
@@ -56,12 +56,10 @@ class YOLODetectionNode(Node):
         # ---- 模型 & 相机 ----
         self.yolo_model = YOLO(model_path)
         self.yolo_names = self.yolo_model.names
-        self.bridge = CvBridge()
         self.vc = None
 
         # ---- 发布者 ----
         self.data_publisher = self.create_publisher(String, 'YOLO_detection', 10)
-        self.image_publisher = self.create_publisher(Image, 'YOLO_detection_image', 10)
 
         # ---- 初始化相机 & 启动检测线程 ----
         self._init_camera(config_file)
@@ -113,7 +111,7 @@ class YOLODetectionNode(Node):
                 msg.data = class_name
                 self.data_publisher.publish(msg)
 
-            # 画框 & 发送标注画面
+            # 画框 & 本地弹窗调试
             annotated = frame.copy()
             for b, c, k in zip(xyxy, conf, cls):
                 x1, y1, x2, y2 = [int(v) for v in b]
@@ -123,8 +121,8 @@ class YOLODetectionNode(Node):
                 cv2.putText(annotated, label, (x1, y1 - 8),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-            image_msg = self.bridge.cv2_to_imgmsg(annotated, encoding='bgr8')
-            self.image_publisher.publish(image_msg)
+            cv2.imshow('YOLO Detection (debug)', annotated)
+            cv2.waitKey(1)
 
             time.sleep(self.rate)
 
