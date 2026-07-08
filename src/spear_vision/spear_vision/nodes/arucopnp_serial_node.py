@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ArUco PnP + 串口 ROS 2 节点
+ArUco PnP 视觉对接 ROS 2 节点
 从 spear/ros2_arucopnp_serial_node.py 迁入 spear_vision 包
 
 订阅话题:
@@ -11,14 +11,13 @@ ArUco PnP + 串口 ROS 2 节点
   - /arucopnp/draw_result  (sensor_msgs/Image)           带标注的检测画面
   - /arucopnp/offset_mm    (geometry_msgs/PointStamped)  偏移量 (mm)
 
-串口发送:
-  - 帧格式: 0xFA 0xB1 + left_mm(f32) + up_mm(f32)
+注意：串口发送由 DriverLogic 的 ros_bridge_node 统一负责，
+      本节点只发布 ROS topic，不直接操作串口。
 """
 
 from __future__ import annotations
 
 import math
-import struct
 
 import cv2
 import numpy as np
@@ -31,7 +30,6 @@ from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
 from spear_vision.core.high_precision_pose_estimator import HighPrecisionPoseEstimator
-from spear_vision.utils.async_serial import AsyncSerial_t
 from spear_vision.utils.signal_filter import OffsetSmoother
 
 # ---- 固定参数（按你的现场直接改这里） ----
@@ -41,8 +39,6 @@ OFFSET_MM_TOPIC = "/arucopnp/offset_mm"
 COMMAND_TOPIC = "/update_exec_req"
 START_COMMAND = "spear_build"
 STOP_COMMAND = "stop"
-SERIAL_PORT = "/dev/ch340"
-SERIAL_BAUD = 921600
 # R1 矛杆中心点相对 ChArUco 原点的外参（单位：mm，默认全 0）
 R1_ROD_CENTER_X_MM = 0.0
 R1_ROD_CENTER_Y_MM = 0.0
@@ -94,7 +90,6 @@ class ArucoPnpSerialNode(Node):
                                                   self._on_image, 1)
         self._cmd_sub = self.create_subscription(String, COMMAND_TOPIC,
                                                   self._on_exec_request, 10)
-        self._serial = AsyncSerial_t(SERIAL_PORT, SERIAL_BAUD)
         self._enabled = False
 
         # One Euro Filter + 死区平滑器
@@ -259,10 +254,6 @@ class ArucoPnpSerialNode(Node):
             offset_msg.point.y = up_mm
             offset_msg.point.z = 0.0
             self._offset_pub.publish(offset_msg)
-
-            payload = struct.pack("<ff", left_mm, up_mm)
-            frame_bytes = bytes([0xFA, 0xB1]) + payload
-            self._serial.write(frame_bytes)
 
 
 def main(args=None) -> None:
