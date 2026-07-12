@@ -31,33 +31,9 @@ OFFSET_MM_TOPIC = "/arucopnp/offset_mm"
 COMMAND_TOPIC = "/update_exec_req"
 START_COMMAND = "spear_build"
 STOP_COMMAND = "stop"
-# R1 矛杆中心点相对 ChArUco 原点的外参（单位：mm，默认全 0）
-R1_ROD_CENTER_X_MM = 0.0
-R1_ROD_CENTER_Y_MM = 0.0
-R1_ROD_CENTER_Z_MM = 0.0
-# R1 矛杆轴线方向在 ChArUco 坐标系里的向量。
-# 只看方向，长度无所谓；按现场标定结果填。
-R1_ROD_AXIS_X_IN_BOARD = 0.0
-R1_ROD_AXIS_Y_IN_BOARD = 0.0
-R1_ROD_AXIS_Z_IN_BOARD = 1.0
-# R2 矛头中心/入口中心相对相机原点的外参（单位：mm，默认全 0）
-R2_HEAD_CENTER_X_MM = 0.0
-R2_HEAD_CENTER_Y_MM = 0.0
-R2_HEAD_CENTER_Z_MM = 0.0
-# R2 矛头入口平面的法向/矛头轴线方向在相机坐标系里的向量。
-# 如果相机光轴和矛头轴线平行，保持 [0, 0, 1]。
-R2_HEAD_AXIS_X_IN_CAMERA = 0.0
-R2_HEAD_AXIS_Y_IN_CAMERA = 0.0
-R2_HEAD_AXIS_Z_IN_CAMERA = 1.0
-# True：用“矛杆轴线”和“矛头入口平面”的交点计算 left/up。
-# False：只用矛杆中心点和矛头中心点做点对点平移误差。
-USE_AXIS_INTERSECTION_COMPENSATION = True
-# 外参修正量（单位：mm），作用在滤波后的 left/up 偏移上
+# 外参修正量（单位：mm）
 LEFT_OFFSET_MM = -53.0
-# UP_OFFSET_MM = -200.0
-UP_RESULT= -20.0
-# 只用于 yaw 调试显示的零点修正；left/up 补偿由轴线和平面交点计算得到。
-YAW_OFFSET_DEG = 0.0
+UP_RESULT = -20.0
 
 
 class ArucoPnpSerialNode(Node):
@@ -101,102 +77,67 @@ class ArucoPnpSerialNode(Node):
     @staticmethod
     def _compute_alignment_error_mm(
         rvec: np.ndarray,
-        tvec: np.ndarray,
+        tvec: np.ndarray,board_pitch_deg=30.0
     ) -> tuple[float, float, float, float]:
-        """计算矛杆对接需要下发的 left/up 偏差。
 
-        默认模式：只计算 R1 矛杆中心点和 R2 矛头中心点之间的点对点误差。
-        轴线模式：把 R1 矛杆轴线投影到 R2 矛头入口平面上，
-        这样小 yaw 偏差造成的落点变化会折算进水平/竖直移动命令。
         """
-        t = np.asarray(tvec, dtype=np.float64).reshape(-1)
-        r = np.asarray(rvec, dtype=np.float64).reshape(-1)
+        计算矛杆对接的 left/up 偏差以及 Yaw 补偿角。
+        
+        参数:
+        tvec, rvec: solvePnP 输出的标定板外参
+        board_pitch_deg: 标定板相对于矛杆的物理 Pitch 角度 (通常为 30 或 -30，取决于安装)
+        
+        返回:
+        left_mm: 向左移动的毫米数
+        up_mm: 向上移动的毫米数
+        yaw_deg: 对接机构需要旋转的 Yaw 角度 (度)
+        """
+        t = np.asarray(tvec, dtype=np.float64).reshape(3)
+        r = np.asarray(rvec, dtype=np.float64).reshape(3)
         if t.size < 3 or r.size < 3:
             return 0.0, 0.0, 0.0, 0.0
         if not np.all(np.isfinite(t[:3])) or not np.all(np.isfinite(r[:3])):
             return 0.0, 0.0, 0.0, 0.0
-
-        board_to_camera_r, _ = cv2.Rodrigues(r[:3].reshape(3, 1))
-
-        rod_center_in_board_m = np.array(
-            [R1_ROD_CENTER_X_MM, R1_ROD_CENTER_Y_MM, R1_ROD_CENTER_Z_MM],
-            dtype=np.float64,
-        ) / 1000.0
-        head_center_in_camera_m = np.array(
-            [R2_HEAD_CENTER_X_MM, R2_HEAD_CENTER_Y_MM, R2_HEAD_CENTER_Z_MM],
-            dtype=np.float64,
-        ) / 1000.0
-
-        rod_center_in_camera_m = board_to_camera_r @ rod_center_in_board_m + t[:3]
-        command_point_in_camera_m = rod_center_in_camera_m
-        rod_axis_in_camera = None
-        head_axis_in_camera = None
-        yaw_deg = 0.0
-
-        if USE_AXIS_INTERSECTION_COMPENSATION:
-            rod_axis_in_board = np.array(
-                [
-                    R1_ROD_AXIS_X_IN_BOARD,
-                    R1_ROD_AXIS_Y_IN_BOARD,
-                    R1_ROD_AXIS_Z_IN_BOARD,
-                ],
-                dtype=np.float64,
-            )
-            head_axis_in_camera = np.array(
-                [
-                    R2_HEAD_AXIS_X_IN_CAMERA,
-                    R2_HEAD_AXIS_Y_IN_CAMERA,
-                    R2_HEAD_AXIS_Z_IN_CAMERA,
-                ],
-                dtype=np.float64,
-            )
-            rod_axis_norm = float(np.linalg.norm(rod_axis_in_board))
-            head_axis_norm = float(np.linalg.norm(head_axis_in_camera))
-
-            if rod_axis_norm > 1e-9 and head_axis_norm > 1e-9:
-                rod_axis_in_camera = board_to_camera_r @ (rod_axis_in_board / rod_axis_norm)
-                head_axis_in_camera = head_axis_in_camera / head_axis_norm
-                denom = float(np.dot(rod_axis_in_camera, head_axis_in_camera))
-
-                if abs(denom) > 1e-6:
-                    scale = float(
-                        np.dot(
-                            head_center_in_camera_m - rod_center_in_camera_m,
-                            head_axis_in_camera,
-                        )
-                        / denom
-                    )
-                    command_point_in_camera_m = rod_center_in_camera_m + scale * rod_axis_in_camera
-
-                yaw_deg = ArucoPnpSerialNode._horizontal_angle_deg(
-                    rod_axis_in_camera,
-                    head_axis_in_camera,
-                ) - YAW_OFFSET_DEG
-
-        alignment_error_m = command_point_in_camera_m - head_center_in_camera_m
-
-        left_mm = -float(alignment_error_m[0]) * 1000.0
-        up_mm = -float(alignment_error_m[1]) * 1000.0
-        if head_axis_in_camera is None:
-            forward_mm = float(alignment_error_m[2]) * 1000.0
+        # 1. 获取标定板到相机的旋转矩阵 R_cam_board
+        R_cam_board, _ = cv2.Rodrigues(r)
+        
+        # 2. 定义从“矛杆”到“标定板”的逆向补偿旋转 (剥离 30度 Pitch)
+        # 注意：这里的正负号取决于标定板是上仰还是下俯，如果在实机上 X 轴偏了，将 30 改为 -30 即可
+        theta = math.radians(board_pitch_deg)
+        R_board_spear = np.array([
+            [1, 0, 0],
+            [0, math.cos(theta), -math.sin(theta)],
+            [0, math.sin(theta),  math.cos(theta)]
+        ])
+        
+        # 3. 计算矛杆在相机坐标系下的真实旋转矩阵
+        R_cam_spear = R_cam_board @ R_board_spear
+        
+        # 4. 提取矛杆的真实轴线方向 (即相机坐标系下的矛杆 Z 轴分量)
+        rod_axis = R_cam_spear[:, 2]
+        
+        # 【校验机制】: 因为相机和矛杆都没有 Pitch，所以它们都在水平面上。
+        # 此时 rod_axis 的 Y 轴分量 rod_axis[1] 在理论上应该非常接近 0。
+        # 如果实际跑出来 rod_axis[1] 很大，说明 board_pitch_deg 的正负号填反了，或者机械安装有较大误差。
+        
+        # 5. 射线求交：补偿由于 Distance 和 Yaw 造成的 X/Y 偏移
+        if abs(rod_axis[2]) > 1e-9:
+            # 将 t (标定板原点) 沿着 spear_axis 延伸到相机的 Z=0 平面
+            command_point = t - (t[2] / rod_axis[2]-3650) * rod_axis
         else:
-            forward_mm = float(
-                np.dot(rod_center_in_camera_m - head_center_in_camera_m, head_axis_in_camera)
-            ) * 1000.0
-        return left_mm, up_mm, forward_mm, yaw_deg
+            command_point = t
+        print(f"t={t}, rod_axis={rod_axis}, command_point={command_point}")    
+        left_mm = -float(command_point[0]) * 1000.0
+        up_mm = -float(command_point[1]) * 1000.0
+        
+        # 6. 计算 Yaw 角度补偿
+        # 提取矛杆 Z 轴在相机 XZ 平面上的投影夹角
+        # R_cam_spear[0, 2] 是 X 方向分量，R_cam_spear[2, 2] 是 Z 方向分量
+        yaw_rad = math.atan2(R_cam_spear[0, 2], R_cam_spear[2, 2])
+        yaw_deg = math.degrees(yaw_rad)
+        
+        return left_mm, up_mm, yaw_deg,0.0
 
-    @staticmethod
-    def _horizontal_angle_deg(v: np.ndarray, ref: np.ndarray) -> float:
-        """计算相机 XZ 水平面上，从 ref 到 v 的有符号夹角。"""
-        v = np.asarray(v, dtype=np.float64).reshape(-1)
-        ref = np.asarray(ref, dtype=np.float64).reshape(-1)
-        if v.size < 3 or ref.size < 3:
-            return 0.0
-        vx, vz = float(v[0]), float(v[2])
-        rx, rz = float(ref[0]), float(ref[2])
-        if math.hypot(vx, vz) < 1e-9 or math.hypot(rx, rz) < 1e-9:
-            return 0.0
-        return math.degrees(math.atan2(vx * rz - vz * rx, vx * rx + vz * rz))
 
     def _on_image(self, msg: Image) -> None:
         frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
