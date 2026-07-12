@@ -31,9 +31,11 @@ OFFSET_MM_TOPIC = "/arucopnp/offset_mm"
 COMMAND_TOPIC = "/update_exec_req"
 START_COMMAND = "spear_build"
 STOP_COMMAND = "stop"
-# 外参修正量（单位：mm）
-LEFT_OFFSET_MM = -53.0
-UP_RESULT = -20.0
+LEFT_OFFSET_MM = -60.0
+# UP_OFFSET_MM = -200.0
+UP_RESULT= -45.0
+# 只用于 yaw 调试显示的零点修正；left/up 补偿由轴线和平面交点计算得到。
+# 外参修正量（单位：mm），作用在滤波后的 left/up 偏移上
 
 
 class ArucoPnpSerialNode(Node):
