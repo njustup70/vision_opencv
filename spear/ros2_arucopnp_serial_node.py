@@ -79,7 +79,7 @@ class ArucoPnpSerialNode(Node):
     @staticmethod
     def _compute_alignment_error_mm(
         rvec: np.ndarray,
-        tvec: np.ndarray,board_pitch_deg=30.0
+        tvec: np.ndarray,board_pitch_deg=-21.0
     ) -> tuple[float, float, float, float]:
 
         """
@@ -125,7 +125,7 @@ class ArucoPnpSerialNode(Node):
         # 5. 射线求交：补偿由于 Distance 和 Yaw 造成的 X/Y 偏移
         if abs(rod_axis[2]) > 1e-9:
             # 将 t (标定板原点) 沿着 spear_axis 延伸到相机的 Z=0 平面
-            command_point = t - (t[2] / rod_axis[2]-3650) * rod_axis
+            command_point = t - (t[2] / rod_axis[2]) * rod_axis
         else:
             command_point = t
         print(f"t={t}, rod_axis={rod_axis}, command_point={command_point}")    
