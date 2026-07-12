@@ -25,7 +25,7 @@ from signal_filter import OffsetSmoother
 
 
 # ---- 固定参数（按你的现场直接改这里） ----
-IMAGE_TOPIC = "/camera/color/image_raw"
+IMAGE_TOPIC = "/hik_camera/image_raw"
 DRAW_RESULT_TOPIC = "/arucopnp/draw_result"
 OFFSET_MM_TOPIC = "/arucopnp/offset_mm"
 COMMAND_TOPIC = "/update_exec_req"
@@ -53,7 +53,7 @@ class ArucoPnpSerialNode(Node):
         self._offset_pub = self.create_publisher(PointStamped, OFFSET_MM_TOPIC, 10)
         self._img_sub = self.create_subscription(Image, IMAGE_TOPIC, self._on_image, 1)
         self._cmd_sub = self.create_subscription(String, COMMAND_TOPIC, self._on_exec_request, 10)
-        self._enabled = False
+        self._enabled = True
 
         # One Euro Filter + 死区平滑器
         # min_cutoff: 静止平滑强度 (越小越平稳, 但响应略慢)
@@ -128,8 +128,8 @@ class ArucoPnpSerialNode(Node):
         up_mm=float(t[1]) * 1000.0
         left_mm=float(t[0]+0.375*math.sin(theta_x)) * 1000.0
         yaw_deg=angle_x
-        print(f"tvec={t},left_mm={left_mm:.2f},yaw={angle_x:.2f}")
-        return left_mm, up_mm, yaw_deg,yaw_deg
+        # print(f"tvec={t},left_mm={left_mm:.2f},yaw={angle_x:.2f}")
+        return -left_mm, up_mm, yaw_deg,yaw_deg
         print(f"Pitch={angle_x:.2f}deg, Yaw={angle_y:.2f}deg, Roll={np.degrees(theta_z):.2f}deg")
         # 2. 定义从“矛杆”到“标定板”的逆向补偿旋转 (剥离 30度 Pitch)
         # 注意：这里的正负号取决于标定板是上仰还是下俯，如果在实机上 X 轴偏了，将 30 改为 -30 即可
