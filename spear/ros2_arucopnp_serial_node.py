@@ -25,7 +25,7 @@ from signal_filter import OffsetSmoother
 
 
 # ---- 固定参数（按你的现场直接改这里） ----
-IMAGE_TOPIC = "/hik_camera/image_raw"
+IMAGE_TOPIC = "/camera/color/image_raw"
 DRAW_RESULT_TOPIC = "/arucopnp/draw_result"
 OFFSET_MM_TOPIC = "/arucopnp/offset_mm"
 COMMAND_TOPIC = "/update_exec_req"
@@ -103,6 +103,34 @@ class ArucoPnpSerialNode(Node):
         # 1. 获取标定板到相机的旋转矩阵 R_cam_board
         R_cam_board, _ = cv2.Rodrigues(r)
         
+        
+        #求绕当前x旋转n度
+        # 2. 从旋转矩阵中提取欧拉角 (假设旋转顺序为 Z-Y-X)
+        # R[2, 1] 和 R[2, 2] 用于计算绕 X 轴的角度
+        # R[2, 0] 用于计算绕 Y 轴的角度
+    
+        # 绕 X 轴旋转角度 (Pitch)
+        #绕当前y旋转30度
+        R=R_cam_board
+        # R=R_cam_board*np.array([[1, 0, 0], [0, math.cos(math.radians(-board_pitch_deg)), -math.sin(math.radians(-board_pitch_deg))], [0, math.sin(math.radians(-board_pitch_deg)), math.cos(math.radians(-board_pitch_deg))]])  
+        theta_x = np.arctan2(R[2, 1], R[2, 2])
+        
+        # 绕 Y 轴旋转角度 (Yaw)
+        # 注意: 这里根据 R[2,0] 计算，具体正负号取决于你定义的"正对"方向
+        theta_y = np.arctan2(-R[2, 0], np.sqrt(R[2, 1]**2 + R[2, 2]**2))
+        
+        # 绕 Z 轴旋转角度 (Roll) - 如果不需要可以忽略
+        theta_z = np.arctan2(R[1, 0], R[0, 0])
+        
+        # 3. 弧度转角度
+        angle_x = np.degrees(theta_x)
+        angle_y = np.degrees(theta_y)
+        up_mm=float(t[1]) * 1000.0
+        left_mm=float(t[0]+0.375*math.sin(theta_x)) * 1000.0
+        yaw_deg=angle_x
+        print(f"tvec={t},left_mm={left_mm:.2f},yaw={angle_x:.2f}")
+        return left_mm, up_mm, yaw_deg,yaw_deg
+        print(f"Pitch={angle_x:.2f}deg, Yaw={angle_y:.2f}deg, Roll={np.degrees(theta_z):.2f}deg")
         # 2. 定义从“矛杆”到“标定板”的逆向补偿旋转 (剥离 30度 Pitch)
         # 注意：这里的正负号取决于标定板是上仰还是下俯，如果在实机上 X 轴偏了，将 30 改为 -30 即可
         theta = math.radians(board_pitch_deg)
@@ -180,7 +208,7 @@ class ArucoPnpSerialNode(Node):
             offset_msg.header = msg.header
             offset_msg.point.x = left_mm
             offset_msg.point.y = up_mm
-            offset_msg.point.z = 0.0
+            offset_msg.point.z = raw_yaw
             self._offset_pub.publish(offset_msg)
 
 
