@@ -202,7 +202,7 @@ class ArucoPnpSerialNode(Node):
         frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
         # print(f"收到图像 {frame.shape[1]}x{frame.shape[0]} @ {msg.header.stamp.sec}.{msg.header.stamp.nanosec:09d}")
         if not self._enabled:
-            out_msg = self._bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+            out_msg = self._bridge.cv2_to_compressed_imgmsg(frame, dst_format="jpeg")
             out_msg.header = msg.header
             self._draw_pub.publish(out_msg)
             return
