@@ -53,9 +53,9 @@ R2_HEAD_AXIS_Z_IN_CAMERA = 1.0
 # False：只用矛杆中心点和矛头中心点做点对点平移误差。
 USE_AXIS_INTERSECTION_COMPENSATION = True
 # 外参修正量（单位：mm），作用在滤波后的 left/up 偏移上
-LEFT_OFFSET_MM = -53.0
+LEFT_OFFSET_MM = -60.0
 # UP_OFFSET_MM = -200.0
-UP_RESULT= -20.0
+UP_RESULT= -45.0
 # 只用于 yaw 调试显示的零点修正；left/up 补偿由轴线和平面交点计算得到。
 YAW_OFFSET_DEG = 0.0
 
