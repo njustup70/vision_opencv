@@ -12,7 +12,7 @@ from cv_bridge import CvBridge
 from geometry_msgs.msg import PointStamped
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image,CompressedImage
 from std_msgs.msg import String
 
 # 允许脚本从任意目录启动时，都能导入当前文件夹里的本地模块。
@@ -71,7 +71,7 @@ class ArucoPnpSerialNode(Node):
         self._estimator = HighPrecisionPoseEstimator(K=K,D=D)
         self._bridge = CvBridge()
 
-        self._draw_pub = self.create_publisher(Image, DRAW_RESULT_TOPIC, qos_profile_sensor_data)
+        self._draw_pub = self.create_publisher(CompressedImage, DRAW_RESULT_TOPIC, qos_profile_sensor_data)
         self._offset_pub = self.create_publisher(PointStamped, OFFSET_MM_TOPIC, 10)
         self._img_sub = self.create_subscription(Image, IMAGE_TOPIC, self._on_image, 1)
         self._cmd_sub = self.create_subscription(String, COMMAND_TOPIC, self._on_exec_request, 10)
@@ -209,9 +209,10 @@ class ArucoPnpSerialNode(Node):
 
         result = self._estimator.on_image(frame)
         rvec, tvec = (None, None) if result is None else result
-
-        out_msg = self._bridge.cv2_to_imgmsg(frame, encoding="bgr8")
+        #转化成CompressedImage格式发布
+        out_msg = self._bridge.cv2_to_compressed_imgmsg(frame, dst_format="jpeg")
         out_msg.header = msg.header
+        
         self._draw_pub.publish(out_msg)
 
         if rvec is None or tvec is None:
